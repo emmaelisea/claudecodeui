@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { Project,CodeEditorDiffInfo,CodeEditorFile } from '@/shared/types';
@@ -19,7 +19,8 @@ export const useEditorSidebar = ({
   const [editingFile, setEditingFile] = useState<CodeEditorFile | null>(null);
   const [editorWidth, setEditorWidth] = useState(initialWidth);
   const [editorExpanded, setEditorExpanded] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
+  // Tracks the active split-pane drag, including whether a release moved at all.
+  const [resizeDrag, setResizeDrag] = useState<{ pointerId: number; startX: number } | null>(null);
   const [hasManualWidth, setHasManualWidth] = useState(false);
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
   // Whether the open editor's buffer differs from disk, as reported by
@@ -90,27 +91,34 @@ export const useEditorSidebar = ({
   }, []);
 
   const handleResizeStart = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (isMobile) {
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (isMobile || !event.isPrimary || event.button !== 0) {
         return;
       }
 
+      event.preventDefault();
+      // The fixed hit area also keeps Chromium's embedded PDF viewer from
+      // intercepting the drag before it reaches the captured pointer.
+      event.currentTarget.dataset.resizing = 'true';
+      event.currentTarget.setPointerCapture(event.pointerId);
       // After first drag interaction, the editor width is user-controlled.
       setHasManualWidth(true);
-      setIsResizing(true);
-      event.preventDefault();
+      setResizeDrag({ pointerId: event.pointerId, startX: event.clientX });
     },
     [isMobile],
   );
 
   useEffect(() => {
-    if (!isResizing) {
+    const handle = resizeHandleRef.current;
+    const mainContainer = handle?.parentElement?.parentElement;
+    if (!resizeDrag || !handle || !mainContainer) {
       return undefined;
     }
+    const { pointerId, startX } = resizeDrag;
 
     // `editorWidth` is read by WorkspaceMain, so every commit re-renders the
     // whole workspace including the chat transcript. A high-polling-rate mouse
-    // fires several mousemove events per frame, so the width is coalesced to one
+    // fires several pointermove events per frame, so the width is coalesced to one
     // commit per frame — the same visual result for a fraction of the renders.
     let pendingWidth: number | null = null;
     let frameHandle: number | null = null;
@@ -123,35 +131,30 @@ export const useEditorSidebar = ({
       }
     };
 
-    const handleMouseMove = (event: globalThis.MouseEvent) => {
-      // Get the main container (parent of EditorSidebar's parent) that contains both left content and editor
-      const editorContainer = resizeHandleRef.current?.parentElement;
-      const mainContainer = editorContainer?.parentElement;
-      if (!mainContainer) {
-        return;
-      }
-
+    const handlePointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
       const containerRect = mainContainer.getBoundingClientRect();
-      // Calculate new editor width: distance from mouse to right edge of main container
       const newWidth = containerRect.right - event.clientX;
-
-      const minWidth = 300;
       const maxWidth = containerRect.width * 0.8;
-
-      if (newWidth >= minWidth && newWidth <= maxWidth) {
-        pendingWidth = newWidth;
-        if (frameHandle === null) {
-          frameHandle = requestAnimationFrame(commitPendingWidth);
-        }
+      pendingWidth = Math.min(maxWidth, Math.max(300, newWidth));
+      if (frameHandle === null) {
+        frameHandle = requestAnimationFrame(commitPendingWidth);
       }
     };
 
-    const handleMouseUp = () => {
-      setIsResizing(false);
+    const finishResize = () => setResizeDrag(null);
+    const handlePointerEnd = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      if (event.type === 'pointerup' && event.clientX !== startX) handlePointerMove(event);
+      finishResize();
     };
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerEnd);
+    document.addEventListener('pointercancel', handlePointerEnd);
+    document.addEventListener('lostpointercapture', handlePointerEnd);
+    window.addEventListener('blur', finishResize);
+    const { cursor, userSelect } = document.body.style;
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
 
@@ -162,12 +165,17 @@ export const useEditorSidebar = ({
       // Land on the last position the pointer reached rather than the last
       // frame that happened to commit.
       commitPendingWidth();
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerEnd);
+      document.removeEventListener('pointercancel', handlePointerEnd);
+      document.removeEventListener('lostpointercapture', handlePointerEnd);
+      window.removeEventListener('blur', finishResize);
+      delete handle.dataset.resizing;
+      if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+      document.body.style.cursor = cursor;
+      document.body.style.userSelect = userSelect;
     };
-  }, [isResizing]);
+  }, [resizeDrag]);
 
   return {
     editingFile,

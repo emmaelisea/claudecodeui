@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
-import type { MouseEvent, MutableRefObject } from 'react';
+import type { MutableRefObject, PointerEvent } from 'react';
 
 import type { CodeEditorFile } from '@/shared/types';
 import CodeEditor from '@/modules/code-editor/CodeEditor';
@@ -11,7 +11,7 @@ type EditorSidebarProps = {
   editorWidth: number;
   hasManualWidth: boolean;
   resizeHandleRef: MutableRefObject<HTMLDivElement | null>;
-  onResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
+  onResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
   onCloseEditor: () => void;
   onToggleEditorExpand: () => void;
   // Forwarded to CodeEditor so useEditorSidebar can refuse to swap a dirty
@@ -122,8 +122,8 @@ export default function EditorSidebar({
       {!isFloating && !editorExpanded && (
         <div
           ref={resizeHandleRef}
-          onMouseDown={onResizeStart}
-          className="group relative w-1 flex-shrink-0 cursor-col-resize bg-gray-200 transition-colors hover:bg-blue-500 dark:bg-gray-700 dark:hover:bg-blue-600"
+          onPointerDown={onResizeStart}
+          className="group peer relative w-1 flex-shrink-0 cursor-col-resize touch-none bg-gray-200 transition-colors after:pointer-events-none after:fixed after:inset-0 after:z-50 after:content-[''] hover:bg-blue-500 data-[resizing=true]:after:pointer-events-auto dark:bg-gray-700 dark:hover:bg-blue-600"
           title="Drag to resize"
         >
           <div className="absolute inset-y-0 left-1/2 w-1 -translate-x-1/2 bg-blue-500 opacity-0 transition-opacity group-hover:opacity-100 dark:bg-blue-600" />
@@ -133,7 +133,7 @@ export default function EditorSidebar({
       <div
         className={isFloating
           ? 'contents'
-          : `h-full overflow-hidden border-l border-gray-200 dark:border-gray-700 ${useFlexLayout ? 'min-w-0 flex-1' : ''}`}
+          : `h-full overflow-hidden border-l border-gray-200 dark:border-gray-700 peer-data-[resizing=true]:[&_iframe]:pointer-events-none ${useFlexLayout ? 'min-w-0 flex-1' : ''}`}
         style={isFloating || useFlexLayout ? undefined : { width: `${effectiveWidth}px`, minWidth: `${MIN_EDITOR_WIDTH}px` }}
       >
         <CodeEditor
