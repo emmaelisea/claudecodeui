@@ -237,11 +237,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               </div>
             )}
           </div>
-          {!isGrouped && (
-            <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex">
-              U
-            </div>
-          )}
+          <div className={`hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex ${isGrouped ? 'invisible' : ''}`}>
+            U
+          </div>
         </div>
       ) : message.contextCleared ? (
         /* Where the context was cleared: the model remembers nothing above this line */
