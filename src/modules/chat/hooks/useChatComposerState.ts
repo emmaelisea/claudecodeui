@@ -51,7 +51,7 @@ type UseChatComposerStateArgs = {
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
-  sendMessage: (message: unknown) => void;
+  sendMessage: (message: unknown) => boolean | void;
   /** Whether the chat socket is currently open; a side-question ask while it is not would send nothing and leave the optimistic entry pending forever. */
   isConnected?: boolean;
   sendByCtrlEnter?: boolean;
@@ -1295,6 +1295,7 @@ export function useChatComposerState({
       // via the session gateway. There is no client-visible session-id
       // handoff later — this id stays valid for the conversation's lifetime.
       let targetSessionId = selectedSession?.id || currentSessionId || null;
+      let newSessionSummary: string | null = null;
       if (!targetSessionId) {
         let createdSessionName = sessionSummary;
         try {
@@ -1336,11 +1337,7 @@ export function useChatComposerState({
           return;
         }
 
-        onSessionEstablished?.(targetSessionId, {
-          provider,
-          project: selectedProject,
-          summary: createdSessionName,
-        });
+        newSessionSummary = createdSessionName;
       }
 
       // A new turn replaces the CLI process a session's background work runs
@@ -1377,35 +1374,10 @@ export function useChatComposerState({
         }
       }
 
-      const attachmentRecords = uploadedAttachments as ChatAttachment[];
-      const userMessage: ChatMessage = {
-        type: 'user',
-        content: currentInput,
-        images: attachmentRecords.filter(isImageAttachment),
-        files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
-        timestamp: new Date(),
-        // Tags this echo as the replacement, so the truncation the server
-        // broadcasts a moment later cuts the turns being replaced without
-        // taking the message the user just sent with them.
-        ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
-      };
-
-      addMessage(userMessage);
-      // Mark this request as processing in the per-session activity map (the
-      // single source of truth the indicator derives from). The id is always
-      // concrete at this point — no pending placeholder exists anymore.
-      onSessionProcessing?.(targetSessionId, {
-        statusText: null,
-        canInterrupt: true,
-      });
-
-      setIsUserScrolledUp(false);
-      setTimeout(() => scrollToBottom(), 100);
-
       // One message shape for every provider. The backend resolves the
       // provider, project path, and provider-native resume id from the
       // session row; `options` only carries composer-level preferences.
-      sendMessage({
+      const sent = sendMessage({
         // Replacing an already-sent message is its own frame: it changes the
         // shape of the conversation, so it gets validated separately and can
         // report why it was refused.
@@ -1417,7 +1389,52 @@ export function useChatComposerState({
           ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
           attachments: uploadedAttachments,
         },
+      }) !== false;
+      if (newSessionSummary !== null) {
+        // The draft moves from the project's new-chat scope to the allocated
+        // session when it opens. Seed the retry text before switching scopes.
+        if (!sent) writeDraftText(targetSessionId, currentInput);
+        onSessionEstablished?.(targetSessionId, {
+          provider,
+          project: selectedProject,
+          summary: newSessionSummary,
+        });
+      }
+      // A brand-new chat moves from its project scope to its allocated session id meanwhile.
+      const stillOpen = draftScopeRef.current === submittedScope || draftScopeRef.current === targetSessionId;
+      if (!sent) {
+        if (queuedSubmission && sessionKeyRef.current === targetSessionId) {
+          queuedDraftSessionRef.current = sessionKey;
+          setQueuedDraft(queuedSubmission);
+        }
+        if (stillOpen) {
+          addMessage({
+            type: 'error',
+            content: t('message.sendDisconnected'),
+            timestamp: new Date(),
+          });
+        }
+        return;
+      }
+
+      const attachmentRecords = uploadedAttachments as ChatAttachment[];
+      const userMessage: ChatMessage = {
+        type: 'user',
+        content: currentInput,
+        images: attachmentRecords.filter(isImageAttachment),
+        files: attachmentRecords.filter((attachment) => !isImageAttachment(attachment)),
+        timestamp: new Date(),
+        // Keep the optimistic replacement when the server broadcasts the rewind.
+        ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
+      };
+
+      addMessage(userMessage);
+      onSessionProcessing?.(targetSessionId, {
+        statusText: null,
+        canInterrupt: true,
       });
+      setIsUserScrolledUp(false);
+      setTimeout(() => scrollToBottom(), 100);
       // Only this send's edit: an edit begun in another chat during the upload stays.
       setEditingAnchorId((current) => (current === editingAnchorId ? null : current));
 
@@ -1428,8 +1445,6 @@ export function useChatComposerState({
       recordSentMessage(currentInput, targetSessionId);
       // Attachments are not kept per chat, so only the ones just sent go.
       setAttachedFiles((files) => files.filter((file) => !currentAttachments.includes(file)));
-      // A brand-new chat moves from its project scope to its allocated session id meanwhile.
-      const stillOpen = draftScopeRef.current === submittedScope || draftScopeRef.current === targetSessionId;
       if (!stillOpen) {
         // The chat left keeps text the user went back and edited during the upload.
         if (submittedScope && readDraftText(submittedScope) === currentInput) {

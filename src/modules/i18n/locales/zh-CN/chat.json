@@ -262,6 +262,7 @@
   "message": {
     "editAndResend": "编辑并重新发送",
     "forkFromHere": "从此处派生",
+    "sendDisconnected": "连接已断开，消息未发送。请在连接恢复后重试。",
     "answeredBy": "由 {{model}} 回答"
   },
   "composer": {

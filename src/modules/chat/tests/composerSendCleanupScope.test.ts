@@ -48,9 +48,11 @@ const backgroundInA: SessionActivityMap = new Map([[
 const renderComposer = (
   initialSession: ProjectSession | null,
   processingSessions?: SessionActivityMap,
-  { isLoading = false, supportsSteering = false } = {},
+  { isLoading = false, supportsSteering = false, isSocketOpen = (): boolean => true } = {},
 ) => {
   const sent: Array<{ type: string; sessionId?: string; content?: string; anchorId?: string }> = [];
+  const addMessage = vi.fn();
+  const onSessionProcessing = vi.fn();
   let rerender: ((props: Props) => void) | undefined;
   const view = renderHook(({ session }: Props) =>
     useChatComposerState({
@@ -69,11 +71,16 @@ const renderComposer = (
       supportsSideQuestions: true,
       canAbortSession: false,
       tokenBudget: null,
-      sendMessage: (message) => { sent.push(message as { type: string }); },
+      sendMessage: (message) => {
+        if (!isSocketOpen()) return false;
+        sent.push(message as { type: string });
+        return true;
+      },
+      onSessionProcessing,
       // The workspace selects the new session as soon as it exists.
       onSessionEstablished: (sessionId) => { rerender?.({ session: { id: sessionId } }); },
       scrollToBottom: () => undefined,
-      addMessage: () => undefined,
+      addMessage,
       setIsUserScrolledUp: () => undefined,
       setPendingPermissionRequests: () => undefined,
     }),
@@ -81,6 +88,8 @@ const renderComposer = (
   rerender = view.rerender;
   return {
     view,
+    addMessage,
+    onSessionProcessing,
     chatSends: () => sent.filter((message) => message.type === 'chat.send'),
     editSends: () => sent.filter((message) => message.type === 'chat.edit-send'),
   };
@@ -113,6 +122,34 @@ afterEach(() => {
   resetChatDrafts();
 });
 
+test('a socket dropping during upload keeps the draft and files for retry', async () => {
+  let isOpen = true;
+  const { view, chatSends, addMessage, onSessionProcessing } = renderComposer(SESSION_A, undefined, {
+    isSocketOpen: () => isOpen,
+  });
+  const file = new File(['a'], 'a.txt');
+  await act(async () => {
+    view.result.current.setInput('keep this message');
+    view.result.current.setAttachedFiles([file]);
+  });
+  await act(async () => { void submit(view); });
+  isOpen = false;
+  await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
+
+  assert.deepEqual(chatSends(), []);
+  assert.equal(view.result.current.input, 'keep this message');
+  assert.equal(readDraftText('session-a'), 'keep this message');
+  assert.deepEqual(view.result.current.attachedFiles, [file]);
+  assert.deepEqual(addMessage.mock.calls.map(([message]) => message.type), ['error']);
+  assert.equal(onSessionProcessing.mock.calls.length, 0);
+
+  isOpen = true;
+  await act(async () => { void submit(view); });
+  await release(pendingUploads, { attachments: [{ id: 'asset-a' }] });
+  assert.deepEqual(chatSends().map((message) => message.content), ['keep this message']);
+  assert.equal(view.result.current.input, '');
+});
+
 test('a send finishing after a chat switch leaves the open chat alone', async () => {
   const { view, chatSends } = renderComposer(SESSION_A);
   const fileA = new File(['a'], 'a.txt');
@@ -136,6 +173,19 @@ test('a send finishing after a chat switch leaves the open chat alone', async ()
   assert.equal(view.result.current.input, 'typed in b', 'the open chat keeps its text');
   assert.equal(readDraftText('session-b'), 'typed in b', 'and its draft');
   assert.deepEqual(view.result.current.attachedFiles, [fileB], 'only the sent file is gone');
+});
+
+test('a first message refused by the socket follows the allocated session as a draft', async () => {
+  const { view, chatSends } = renderComposer(null, undefined, { isSocketOpen: () => false });
+  await act(async () => {
+    view.result.current.setInput('first message');
+  });
+  await act(async () => { void submit(view); });
+  await release(pendingCreates, { success: true, data: { sessionId: 'session-new', sessionName: 'first' } }, 201);
+
+  assert.deepEqual(chatSends(), []);
+  assert.equal(view.result.current.input, 'first message');
+  assert.equal(readDraftText('session-new'), 'first message');
 });
 
 test('a new chat is still cleaned up once it has its session id', async () => {

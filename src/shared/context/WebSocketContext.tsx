@@ -18,7 +18,8 @@ type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
 
 type WebSocketContextType = {
   ws: WebSocket | null;
-  sendMessage: (message: unknown) => void;
+  /** Returns false when the frame cannot be handed to the local socket. */
+  sendMessage: (message: unknown) => boolean;
   /**
    * Subscribes to every websocket frame. Returns an unsubscribe function.
    *
@@ -187,10 +188,17 @@ const useWebSocketProviderState = (): WebSocketContextType => {
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
-    } else {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
       console.warn('WebSocket not connected');
+      return false;
+    }
+
+    try {
+      socket.send(JSON.stringify(message));
+      return true;
+    } catch (error) {
+      console.error('WebSocket send failed:', error);
+      return false;
     }
   }, []);
 

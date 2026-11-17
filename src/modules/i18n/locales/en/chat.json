@@ -374,6 +374,7 @@
   "message": {
     "editAndResend": "Edit and resend",
     "forkFromHere": "Fork from here",
+    "sendDisconnected": "Message not sent. Wait for the connection to recover, then resend.",
     "answeredBy": "Answered by {{model}}"
   },
   "export": {
