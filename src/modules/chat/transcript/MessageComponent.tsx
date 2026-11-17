@@ -180,8 +180,8 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
     >
       {message.type === 'user' ? (
         /* User turn on the right: claude.ai-style attachment cards above the bubble */
-        <div className="group/user-message flex min-w-0 max-w-[85%] flex-col items-end md:max-w-md lg:max-w-lg xl:max-w-xl">
-          <div className="flex min-w-0 max-w-full flex-col items-end gap-2">
+        <div className="flex w-full items-end space-x-0 sm:w-auto sm:max-w-[85%] sm:space-x-3 md:max-w-md lg:max-w-lg xl:max-w-xl">
+          <div className="flex min-w-0 flex-1 flex-col items-end gap-2 sm:flex-initial">
             {message.images && message.images.length > 0 && (
               <ChatMessageImages
                 images={message.images}
@@ -192,7 +192,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               <ChatMessageFiles files={message.files} />
             )}
             {userCopyContent.trim().length > 0 || (!message.images?.length && !message.files?.length) ? (
-              <div className="max-w-full rounded-2xl bg-muted px-3 py-2 text-foreground sm:px-3.5">
+              <div className="group max-w-full rounded-2xl rounded-br-md border border-border/60 bg-muted/60 px-3 py-2 text-foreground shadow-sm dark:bg-gray-800/60 sm:px-4">
                 <div dir="auto" className="break-words text-sm">
                   <Markdown
                     breaks
@@ -201,37 +201,47 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                     {message.content}
                   </Markdown>
                 </div>
+                <div className="mt-1 flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                  {onEditMessage && message.transcriptAnchorId && (
+                    <button
+                      type="button"
+                      onClick={() => onEditMessage(message)}
+                      title={t('message.editAndResend')}
+                      aria-label={t('message.editAndResend')}
+                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <PencilIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {onForkFromMessage && message.transcriptAnchorId && (
+                    <button
+                      type="button"
+                      onClick={() => onForkFromMessage(message)}
+                      title={t('message.forkFromHere')}
+                      aria-label={t('message.forkFromHere')}
+                      className="rounded p-1 opacity-0 transition-opacity hover:bg-muted focus-visible:opacity-100 group-hover:opacity-100"
+                    >
+                      <GitBranchIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {shouldShowUserCopyControl && (
+                    <MessageCopyControl content={userCopyContent} messageType="user" />
+                  )}
+                  <span>{formattedTime}</span>
+                </div>
               </div>
-            ) : null}
+            ) : (
+              /* Attachment-only turn: no text bubble, but the timestamp still shows */
+              <div className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                <span>{formattedTime}</span>
+              </div>
+            )}
           </div>
-          <div className={`mt-0.5 flex items-center justify-end gap-1 text-xs tabular-nums text-muted-foreground ${isExporting ? '' : 'transition-opacity group-focus-within/user-message:opacity-100 group-hover/user-message:opacity-100 [@media(hover:hover)_and_(pointer:fine)]:opacity-0'}`}>
-            {!isExporting && onEditMessage && message.transcriptAnchorId && (
-              <button
-                type="button"
-                onClick={() => onEditMessage(message)}
-                title={t('message.editAndResend')}
-                aria-label={t('message.editAndResend')}
-                className="rounded p-1 hover:bg-muted"
-              >
-                <PencilIcon className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {!isExporting && onForkFromMessage && message.transcriptAnchorId && (
-              <button
-                type="button"
-                onClick={() => onForkFromMessage(message)}
-                title={t('message.forkFromHere')}
-                aria-label={t('message.forkFromHere')}
-                className="rounded p-1 hover:bg-muted"
-              >
-                <GitBranchIcon className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {shouldShowUserCopyControl && (
-              <MessageCopyControl content={userCopyContent} messageType="user" />
-            )}
-            <span>{formattedTime}</span>
-          </div>
+          {!isGrouped && (
+            <div className="hidden h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm text-white sm:flex">
+              U
+            </div>
+          )}
         </div>
       ) : message.contextCleared ? (
         /* Where the context was cleared: the model remembers nothing above this line */
