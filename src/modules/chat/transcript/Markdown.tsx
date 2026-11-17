@@ -6,6 +6,8 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTranslation } from 'react-i18next';
+import type { Root, RootContent, PhrasingContent } from 'mdast';
+import type { Plugin } from 'unified';
 
 import { MermaidDiagram } from '@/modules/code-editor';
 import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
@@ -91,6 +93,51 @@ const childrenToText = (children: React.ReactNode): string => {
 const MATH_DELIMITER = /\$\$/;
 
 const EMPTY_PLUGINS: never[] = [];
+
+// CommonMark leaves these delimiters literal when Chinese punctuation ends a
+// bold phrase and the next Chinese word starts immediately after the markers.
+const CJK_STRONG = /(?<!\*)\*\*([^\s*][^*\r\n]*?[。！？；：，、”’」』）》】])([ \t]*)\*\*(?=\p{Script=Han})/gu;
+
+const remarkCjkStrong: Plugin<[], Root> = () => (tree, file) => {
+  const source = file.toString();
+  const repair = (node: Root | RootContent): void => {
+    if (!('children' in node)) return;
+    const children: RootContent[] = node.children;
+
+    for (let index = children.length - 1; index >= 0; index -= 1) {
+      const child = children[index];
+      if (child.type !== 'text') {
+        repair(child);
+        continue;
+      }
+
+      const { start, end } = child.position ?? {};
+      if (start?.offset === undefined || end?.offset === undefined
+        || source.slice(start.offset, end.offset) !== child.value) continue;
+
+      // Only reinterpret literal text. Parsed code, escapes, entities and
+      // existing strong spans retain their CommonMark representation.
+      const replacement: PhrasingContent[] = [];
+      let cursor = 0;
+      for (const match of child.value.matchAll(CJK_STRONG)) {
+        if (cursor < match.index) {
+          replacement.push({ type: 'text', value: child.value.slice(cursor, match.index) });
+        }
+        replacement.push({ type: 'strong', children: [{ type: 'text', value: match[1] }] });
+        if (match[2]) replacement.push({ type: 'text', value: match[2] });
+        cursor = match.index + match[0].length;
+      }
+      if (cursor === 0) continue;
+      if (cursor < child.value.length) {
+        replacement.push({ type: 'text', value: child.value.slice(cursor) });
+      }
+      children.splice(index, 1, ...replacement);
+    }
+  };
+
+  repair(tree);
+};
+
 
 type CodeBlockProps = {
   node?: any;
@@ -289,7 +336,7 @@ function MarkdownBodyRenderer({ children, breaks = false }: Omit<MarkdownProps, 
   const hasMath = useMemo(() => MATH_DELIMITER.test(content), [content]);
   const remarkPlugins = useMemo(
     () => {
-      const plugins: unknown[] = [remarkGfm];
+      const plugins: unknown[] = [remarkGfm, remarkCjkStrong];
       if (hasMath) {
         plugins.push([remarkMath, { singleDollarTextMath: false }]);
       }

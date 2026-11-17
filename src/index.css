@@ -127,11 +127,7 @@
   }
   
   body {
-    @apply bg-background text-foreground;
-
-    font-family: "Encode Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    @apply bg-background font-sans text-foreground;
     margin: 0;
     padding: 0;
   }
