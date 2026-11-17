@@ -345,6 +345,8 @@ function ChatMessagesPane({
 
               const messagePrevMessage = prevMessage;
               prevMessage = item;
+              const isConsecutiveUserMessage = item.type === 'user' && !item.sideQuestion
+                && messagePrevMessage?.type === 'user' && !messagePrevMessage.sideQuestion;
 
               return (
                 <LazyMessageRow
@@ -354,7 +356,7 @@ function ChatMessagesPane({
                   initiallyNearViewport={initiallyNearViewport}
                   // A side question's answer is the bottom half of the aside
                   // its question row starts, so the list's gap goes.
-                  className={item.sideQuestion && item.type === 'assistant' ? '!mt-0' : undefined}
+                  className={item.sideQuestion && item.type === 'assistant' ? '!mt-0' : isConsecutiveUserMessage ? '!mt-1' : undefined}
                 >
                   <MessageComponent
                     message={item}
