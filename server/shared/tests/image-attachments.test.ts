@@ -107,6 +107,19 @@ test('appendFilesInputTag and parseFilesInputTag round-trip non-image files', ()
   });
 });
 
+test('parseFilesInputTag restores legacy upload names and preserves names from other sources', () => {
+  const name = 'PBL 教师试用方案.pdf';
+  const legacyName = Buffer.from(name, 'utf8').toString('latin1');
+  const attachments = [
+    { path: 'C:/Users/x/.cloudcli/assets/1794878919342-123-report.pdf', name: legacyName },
+    { path: '/home/x/.cloudcli/assets/1794878919342-123-Resume.pdf', name: 'Résumé.pdf' },
+    { path: '/home/x/.cloudcli/assets/u8-1794878919342-123-report.pdf', name: 'Ã©.pdf' },
+    { path: '/project/report.pdf', name: 'Ã©.pdf' },
+  ];
+  const parsed = parseFilesInputTag(appendFilesInputTag('Review this', attachments));
+  assert.deepEqual(parsed.attachments, [{ ...attachments[0], name }, ...attachments.slice(1)]);
+});
+
 test('parseFilesInputTag handles Windows-flattened provider prompts', () => {
   const flattened = appendFilesInputTag(
     'inspect this',

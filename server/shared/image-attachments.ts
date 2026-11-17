@@ -22,6 +22,22 @@ export function getGlobalImageAssetsDir(): string {
   return path.join(os.homedir(), '.cloudcli', 'assets');
 }
 
+const attachmentNameDecoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+
+/** Reverses Multer's Latin-1 interpretation of browser UTF-8 upload names.
+ * Used by the Assets module and legacy chat history. Leaves names outside
+ * Latin-1 and byte sequences that are invalid UTF-8 as supplied.
+ */
+export function decodeMultipartAttachmentName(name: string): string {
+  if (/[^\u0000-\u00ff]/.test(name) || !/[^\u0000-\u007f]/.test(name)) return name;
+
+  try {
+    return attachmentNameDecoder.decode(Buffer.from(name, 'latin1'));
+  } catch {
+    return name;
+  }
+}
+
 export type ImageAttachmentDescriptor = {
   /** Project-relative (preferred) or absolute path to the stored image. */
   path: string;
@@ -269,7 +285,12 @@ function parseNumberedImageEntries(inner: string): ParsedImageAttachment[] {
     }
 
     if (entryText) {
-      attachments.push(name ? { path: toPosixPath(entryText), name } : { path: toPosixPath(entryText) });
+      const attachmentPath = toPosixPath(entryText);
+      // Only the old uploader used this prefix. New names are decoded at upload.
+      if (name && /(?:^|\/)\.cloudcli\/assets\/\d{13}-\d+-[^/]+$/.test(attachmentPath)) {
+        name = decodeMultipartAttachmentName(name);
+      }
+      attachments.push(name ? { path: attachmentPath, name } : { path: attachmentPath });
     }
   }
   return attachments;

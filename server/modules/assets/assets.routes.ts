@@ -8,6 +8,7 @@ import {
   isAllowedImageMimeType,
   openStoredAttachmentAsset,
 } from '@/modules/assets/services/image-assets.service.js';
+import { decodeMultipartAttachmentName } from '@/shared/image-attachments.js';
 
 const router = express.Router();
 
@@ -20,9 +21,10 @@ const storage = multer.diskStorage({
       .catch((error) => cb(error as Error, ''));
   },
   filename: (req, file, cb) => {
+    file.originalname = decodeMultipartAttachmentName(file.originalname);
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
     const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    cb(null, `${uniqueSuffix}-${sanitizedName}`);
+    cb(null, `u8-${uniqueSuffix}-${sanitizedName}`);
   },
 });
 
