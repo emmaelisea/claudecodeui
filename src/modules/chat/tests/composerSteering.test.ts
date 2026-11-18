@@ -126,6 +126,20 @@ test('steering a queued card leaves its durable record until the server accepts 
   assert.equal(view.result.current.input, 'still typing');
 });
 
+test('a queued card is cleared even when the delivery echo arrives before the acceptance', async () => {
+  const { view, sent } = render();
+  await submit(view, 'queued correction');
+  act(() => view.result.current.steerQueuedDraft());
+  const [frame] = steerFrames(sent);
+  queued.delete('session-1'); // the server consumed the durable queue
+  await act(async () => {
+    view.result.current.handleSteerOutcome('session-1', String(frame.messageId), 'delivered');
+    view.result.current.handleSteerOutcome('session-1', String(frame.messageId), 'accepted');
+  });
+  assert.equal(view.result.current.queuedDraft, null);
+  assert.equal(view.result.current.pendingSteers.length, 0);
+});
+
 beforeEach(async () => {
   queued = new Map();
   resetChatDrafts();

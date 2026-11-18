@@ -1065,8 +1065,14 @@ export function useChatComposerState({
   const handleSteerOutcome = useCallback(
     (_sessionId: string, messageId: string, outcome: SteerOutcome) => {
       if (outcome === 'delivered') {
-        if (pendingSteersRef.current.some((steer) => isEchoOfSteer(messageId, steer.messageId))) {
+        const delivered = pendingSteersRef.current.find((steer) => isEchoOfSteer(messageId, steer.messageId));
+        if (delivered) {
           updatePendingSteers((current) => current.filter((steer) => !isEchoOfSteer(messageId, steer.messageId)));
+          if (delivered.fromQueue) {
+            void hydrateChatDrafts().then(() => {
+              if (sessionKeyRef.current === delivered.sessionKey) setQueuedDraft(restoreQueuedDraft(delivered.sessionKey));
+            });
+          }
         }
         return;
       }
