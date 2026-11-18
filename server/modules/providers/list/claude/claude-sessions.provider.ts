@@ -1319,6 +1319,22 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     // the CLI talking to itself, not the user.
     if (raw.type === 'attachment') {
       const attachment = readObjectRecord(raw.attachment);
+      const origin = readObjectRecord(attachment?.origin);
+      // Peer reports are system-delivered model output. Use the structured
+      // report so internal instructions and XML framing never reach the bubble.
+      if (attachment?.type === 'queued_command' && origin?.kind === 'peer' && origin.handback === true) {
+        const report = typeof origin.handbackReportText === 'string' ? origin.handbackReportText.trim() : '';
+        return report ? [createNormalizedMessage({
+          id: baseId,
+          sessionId,
+          timestamp: ts,
+          provider: PROVIDER,
+          kind: 'text',
+          role: 'assistant',
+          content: report,
+        })] : [];
+      }
+      if (raw.renderedRole === 'system' || attachment?.isMeta === true) return [];
       const commandMode = attachment?.commandMode ?? 'prompt';
       if (attachment?.type === 'queued_command' && commandMode === 'prompt' && attachment.prompt) {
         return this.normalizeMessageRows({

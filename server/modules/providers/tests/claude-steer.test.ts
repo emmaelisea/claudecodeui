@@ -260,3 +260,64 @@ test('history leaves the CLI\'s own queued notes out', () => {
 
   assert.deepEqual(sessions.normalizeMessage(row, SESSION_ID), []);
 });
+
+test('a subagent hand-back displays its report as an assistant message', () => {
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  const row = {
+    type: 'attachment',
+    uuid: 'report-row',
+    timestamp: '2026-11-18T07:20:03.004Z',
+    renderedRole: 'system',
+    attachment: {
+      type: 'queued_command',
+      commandMode: 'prompt',
+      prompt: '<agent-message from="agent-1">[Subagent hand-back] Internal wrapper</agent-message>',
+      origin: { kind: 'peer', handback: true, handbackReportText: '**Findings**\n\nThe reviewed page is complete.' },
+    },
+  };
+  const messages = sessions.normalizeMessage(row, SESSION_ID);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].role, 'assistant');
+  assert.equal(messages[0].content, '**Findings**\n\nThe reviewed page is complete.');
+  assert.equal(messages[0].id, 'report-row');
+  assert.equal(messages[0].transcriptAnchorId, undefined);
+});
+
+test('system queued prompts never become user messages', () => {
+  const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
+  for (const metadata of [{ renderedRole: 'system' }, { attachment: { isMeta: true } }]) {
+    const row = {
+      type: 'attachment',
+      ...metadata,
+      attachment: {
+        type: 'queued_command', commandMode: 'prompt', prompt: 'Internal system note',
+        ...('attachment' in metadata ? metadata.attachment : {}),
+      },
+    };
+    assert.deepEqual(sessions.normalizeMessage(row, SESSION_ID), []);
+  }
+});
+
+test('a streamed subagent report reaches the client as assistant output', async () => {
+  await withRun(async ({ script, sent }) => {
+    script.emit(init());
+    script.emit({
+      type: 'attachment',
+      session_id: NATIVE_ID,
+      uuid: 'live-report',
+      renderedRole: 'system',
+      attachment: {
+        type: 'queued_command',
+        commandMode: 'prompt',
+        prompt: '<agent-message>Internal wrapper</agent-message>',
+        origin: { kind: 'peer', handback: true, handbackReportText: 'Report from the background agent.' },
+      },
+    });
+    await waitFor(() => sent.some((message) => message.id === 'live-report'));
+    const report = sent.find((message) => message.id === 'live-report');
+    assert.equal(report?.role, 'assistant');
+    assert.equal(report?.content, 'Report from the background agent.');
+    assert.equal(userTexts(sent).length, 0);
+    script.emit(result());
+  });
+});
