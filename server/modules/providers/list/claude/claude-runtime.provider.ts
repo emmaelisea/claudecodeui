@@ -39,6 +39,7 @@ import {
   notifyUserIfEnabled
 } from '@/modules/notifications/index.js';
 import { sessionHistoryCache } from '@/modules/providers/services/session-history-cache.service.js';
+import { createClaudeOutputMeter } from '@/modules/providers/services/claude-performance.service.js';
 import {
   getReportedClaudeContextWindow,
   rememberClaudeContextWindow
@@ -98,6 +99,7 @@ type SteerRequest = {
   images?: unknown;
   files?: unknown;
   messageId: string;
+  priority: 'now' | 'next';
 };
 
 type SteerInput = (request: SteerRequest) => Promise<boolean>;
@@ -445,6 +447,7 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
   };
 
   sdkOptions.settingSources = ['project', 'user', 'local'];
+  sdkOptions.includePartialMessages = true;
 
   // The SDK resumes with the provider-native session id, never the app id.
   // `resumeFromScratch` is set when the very first prompt of a conversation was
@@ -1166,6 +1169,7 @@ async function queryClaudeSDK(
   // Process-map key: the app session id when the caller supplied one, else
   // the provider-native id once captured (legacy/direct API callers).
   const sessionKey = () => sessionId || capturedSessionId || null;
+  const measureOutput = createClaudeOutputMeter(sessionKey() || '');
 
   const emitNotification = (event: unknown) => {
     notifyUserIfEnabled({
@@ -1292,7 +1296,7 @@ async function queryClaudeSDK(
   // turn; a turn that ends before one runs it as a follow-up turn instead.
   // Refused once the turn has been reported complete: the client then sends
   // it as an ordinary new turn.
-  const steerIntoTurn: SteerInput = async ({ command: steerCommand, images, files, messageId }) => {
+  const steerIntoTurn: SteerInput = async ({ command: steerCommand, images, files, messageId, priority }) => {
     if (turnCompleteSent) {
       return false;
     }
@@ -1303,7 +1307,7 @@ async function queryClaudeSDK(
     }
     pendingSteerIds.add(messageId);
     steeredMessageIds.add(messageId);
-    const pushed = pushPromptMessage({ ...steerMessage, priority: 'next', uuid: messageId });
+    const pushed = pushPromptMessage({ ...steerMessage, priority, uuid: messageId });
     if (!pushed) {
       pendingSteerIds.delete(messageId);
       steeredMessageIds.delete(messageId);
@@ -1623,6 +1627,7 @@ async function queryClaudeSDK(
     console.log('Starting async generator loop for session:', capturedSessionId || 'NEW');
     for await (const rawMessage of queryInstance) {
       const message = rawMessage as AnyRecord;
+      measureOutput(message);
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 
@@ -1935,7 +1940,10 @@ async function steerClaudeSDKSession(sessionId: string, command: string, options
   const messageId = typeof options.messageId === 'string' && options.messageId
     ? options.messageId
     : crypto.randomUUID();
-  return session.steerInput({ command, images: options.images, files: options.files, messageId });
+  return session.steerInput({
+    command, images: options.images, files: options.files, messageId,
+    priority: options.priority === 'now' ? 'now' : 'next',
+  });
 }
 
 /**

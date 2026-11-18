@@ -6,6 +6,7 @@ type QueuedMessageCardProps = {
   attachmentCount?: number;
   onEdit: () => void;
   onDelete: () => void;
+  onSteer?: () => void;
 };
 
 /**
@@ -18,6 +19,7 @@ export default function QueuedMessageCard({
   attachmentCount = 0,
   onEdit,
   onDelete,
+  onSteer,
 }: QueuedMessageCardProps) {
   const { t } = useTranslation('chat');
 
@@ -51,6 +53,16 @@ export default function QueuedMessageCard({
         </div>
 
         <div className="flex shrink-0 items-center gap-0.5">
+          {onSteer && (
+            <button
+              type="button"
+              onClick={onSteer}
+              title={t('input.queue.steerNowDescription')}
+              className="rounded-md px-2 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+            >
+              {t('input.queue.steerNow')}
+            </button>
+          )}
           <button
             type="button"
             onClick={onEdit}

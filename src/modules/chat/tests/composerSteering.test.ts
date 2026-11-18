@@ -108,6 +108,24 @@ const submit = async (view: View, text: string) => {
 
 const steerFrames = (sent: Array<Record<string, unknown>>) => sent.filter((frame) => frame.type === 'chat.steer');
 
+test('steering a queued card leaves its durable record until the server accepts it', async () => {
+  const { view, sent } = render();
+  await submit(view, 'queued correction');
+  assert.equal(view.result.current.queuedDraft?.content, 'queued correction');
+  await act(async () => { view.result.current.setInput('still typing'); });
+  act(() => view.result.current.steerQueuedDraft());
+  const [frame] = steerFrames(sent);
+  assert.equal(frame.fromQueue, true);
+  assert.equal(frame.content, 'queued correction');
+  assert.equal(queued.get('session-1')?.content, 'queued correction');
+  assert.equal(view.result.current.input, 'still typing');
+  act(() => view.result.current.handleSteerOutcome('session-1', String(frame.messageId), 'refused'));
+  await act(async () => { await Promise.resolve(); });
+  assert.equal(queued.get('session-1')?.content, 'queued correction');
+  assert.equal(view.result.current.pendingSteers.length, 0);
+  assert.equal(view.result.current.input, 'still typing');
+});
+
 beforeEach(async () => {
   queued = new Map();
   resetChatDrafts();

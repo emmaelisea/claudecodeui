@@ -181,6 +181,9 @@
     "clearInput": "Clear input",
     "scrollToBottom": "Scroll to bottom",
     "queue": {
+      "steerNow": "Steer now",
+      "steerNowDescription": "Send this queued message into the current task immediately",
+      "steerAccepted": "Sent to Claude; waiting to be read",
       "sendNext": "Queue next message",
       "append": "Add to queued message",
       "notCombinable": "Failed to queue message: A slash command runs as a turn of its own, so it cannot be combined with the queued message. Send it after the queued message has gone.",
@@ -211,6 +214,13 @@
       "filesNotReverted": "files the agent already changed are not reverted",
       "cancel": "Cancel"
     }
+  },
+  "usageMetrics": {
+    "label": "Claude plan usage and output speed",
+    "fiveHour": "5h used",
+    "week": "Week used",
+    "resets": "Resets {{time}}",
+    "speedHint": "Latest measured output speed, including thinking tokens and excluding tool execution. Measured {{time}}."
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",

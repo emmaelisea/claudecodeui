@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
-import { sessionsDb } from '@/modules/database/index.js';
+import { sessionDraftsDb, sessionsDb } from '@/modules/database/index.js';
 import {
   MAX_CONCURRENT_SIDE_QUESTIONS_PER_SESSION,
   providerCapabilitiesService,
@@ -29,7 +29,7 @@ import type {
   SideQuestionEvent,
   SideQuestionRuntime,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
+import { parseIncomingJsonObject, readQueuedChatMessage, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -592,8 +592,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 /**
  * Handles `chat.steer`: delivers a message into the session's running turn
- * instead of starting a new one. The model reads it at its next tool-call
- * boundary and carries on; the provider echoes it on the run's stream at that
+ * instead of starting a new one. Normal steering uses the next tool-call
+ * boundary; promoting a queued message requests immediate delivery. The provider echoes it on the run's stream at that
  * moment, which is how every attached tab learns it was read. The sender gets
  * `chat_steer_accepted` once the provider has taken it.
  *
@@ -605,7 +605,8 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 async function handleChatSteer(
   ws: WebSocket,
   data: AnyRecord,
-  dependencies: ChatWebSocketDependencies
+  dependencies: ChatWebSocketDependencies,
+  userId: string | number | null,
 ): Promise<void> {
   const resolved = resolveSendTarget(ws, data, dependencies, 'chat.steer');
   if (!resolved) {
@@ -618,22 +619,49 @@ async function handleChatSteer(
   const content = typeof data.content === 'string' ? data.content : '';
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const attachments = readVerifiedAttachments(clientOptions);
+  // Moving a queued card into a running turn must consume the exact server
+  // record, so a concurrent append/dispatch cannot send it twice.
+  const candidate = data.fromQueue === true
+    ? sessionDraftsDb.listQueuedMessages(sessionId).find((row) => row.userId === Number(userId))
+    : undefined;
+  if (data.fromQueue === true) {
+    const queued = candidate && readQueuedChatMessage(candidate.queuedMessage);
+    if (!queued || queued.content.trimStart().startsWith('/') || queued.content !== content
+      || JSON.stringify(queued.attachments) !== JSON.stringify(clientOptions.attachments ?? [])
+      || !sessionDraftsDb.claimQueuedMessage(candidate!)) {
+      sendProtocolError(ws, 'STEER_UNAVAILABLE', 'The queued message changed or was already sent.', sessionId, { messageId });
+      return;
+    }
+  }
 
   if (!content.trim() && attachments.length === 0) {
+    if (candidate) sessionDraftsDb.restoreQueuedMessage(candidate);
     sendProtocolError(ws, 'MESSAGE_REQUIRED', 'chat.steer requires a message.', sessionId, { messageId });
     return;
   }
 
   const run = chatRunRegistry.getRun(sessionId);
-  const steered = run?.status === 'running'
-    ? await dependencies.runtime.steer(provider, sessionId, content, {
-      images: attachments.filter(isImageAttachmentDescriptor),
-      files: attachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
-      messageId,
-    })
-    : false;
+  let steered = false;
+  try {
+    steered = run?.status === 'running'
+      ? await dependencies.runtime.steer(provider, sessionId, content, {
+        images: attachments.filter(isImageAttachmentDescriptor),
+        files: attachments.filter((descriptor) => !isImageAttachmentDescriptor(descriptor)),
+        messageId,
+        priority: data.fromQueue === true ? 'now' : 'next',
+      })
+      : false;
+  } catch (error) {
+    if (candidate) {
+      sessionDraftsDb.restoreQueuedMessage(candidate);
+      sendProtocolError(ws, 'STEER_UNAVAILABLE', 'The queued message could not be delivered and remains queued.', sessionId, { messageId });
+      return;
+    }
+    throw error;
+  }
 
   if (!steered) {
+    if (candidate) sessionDraftsDb.restoreQueuedMessage(candidate);
     sendProtocolError(
       ws,
       'STEER_UNAVAILABLE',
@@ -643,6 +671,7 @@ async function handleChatSteer(
     );
     return;
   }
+  if (candidate) sessionDraftsDb.deleteEmptyDraft(candidate.userId, sessionId);
 
   // Tells the sender the message is on its way into the turn. From here it is
   // the run's: the echo when Claude reads it, or the run ending without it.
@@ -943,7 +972,7 @@ export function handleChatConnection(
           handleChatSideQuestion(ws, data, dependencies);
           return;
         case 'chat.steer':
-          await handleChatSteer(ws, data, dependencies);
+          await handleChatSteer(ws, data, dependencies, userId);
           return;
         case 'chat.abort':
           await handleChatAbort(ws, data, dependencies);

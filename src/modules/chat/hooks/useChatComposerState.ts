@@ -1079,6 +1079,13 @@ export function useChatComposerState({
         updatePendingSteers((current) => current.map((candidate) => (
           candidate.messageId === messageId ? { ...candidate, status: 'accepted' } : candidate
         )));
+        if (steer.fromQueue) {
+          void hydrateChatDrafts().then(() => {
+            if (sessionKeyRef.current === steer.sessionKey) {
+              setQueuedDraft(restoreQueuedDraft(steer.sessionKey));
+            }
+          });
+        }
         return;
       }
 
@@ -1086,6 +1093,12 @@ export function useChatComposerState({
       // for this conversation now, so it goes out as the next turn — the
       // queue sends it as soon as the session is idle, which it about is.
       updatePendingSteers((current) => current.filter((candidate) => candidate.messageId !== messageId));
+      if (steer.fromQueue) {
+        void hydrateChatDrafts().then(() => {
+          if (sessionKeyRef.current === steer.sessionKey) setQueuedDraft(restoreQueuedDraft(steer.sessionKey));
+        });
+        return;
+      }
       void queueMessage({
         content: steer.content,
         attachments: steer.attachments,
@@ -1614,6 +1627,33 @@ export function useChatComposerState({
     setQueuedDraft(null);
   }, []);
 
+  // The server atomically takes the queued record. A refusal leaves it queued.
+  const steerQueuedDraft = useCallback(() => {
+    const target = queuedDraftSessionRef.current;
+    if (!queuedDraft || !target || !isLoading || !supportsSteering || queuedDraft.content.trimStart().startsWith('/')
+      || pendingSteersRef.current.some((steer) => steer.fromQueue)) return;
+    const messageId = createSteerMessageId();
+    const pending: PendingSteer = {
+      messageId,
+      sessionKey: target,
+      content: queuedDraft.content,
+      attachments: queuedDraft.attachments,
+      uploadedAttachments: queuedDraft.uploadedAttachments ?? [],
+      status: 'sending',
+      fromQueue: true,
+    };
+    updatePendingSteers((current) => [...current, pending]);
+    const sent = sendMessage({
+      type: 'chat.steer',
+      sessionId: target,
+      messageId,
+      content: pending.content,
+      fromQueue: true,
+      options: { attachments: pending.uploadedAttachments },
+    }) !== false;
+    if (!sent) updatePendingSteers((current) => current.filter((steer) => steer.messageId !== messageId));
+  }, [isLoading, queuedDraft, sendMessage, supportsSteering, updatePendingSteers]);
+
   // A voice transcript either fills the input (to edit before sending) or, when the
   // user tapped "stop and send", is submitted straight away. Mirror the value into
   // inputValueRef synchronously so handleSubmit reads the new text, not the stale state.
@@ -1939,6 +1979,7 @@ export function useChatComposerState({
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
+    steerQueuedDraft,
     pendingSteers: visiblePendingSteers,
     handleSteerOutcome,
     handleVoiceTranscript,

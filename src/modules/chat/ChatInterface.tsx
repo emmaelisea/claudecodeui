@@ -29,6 +29,7 @@ import {
 } from '@/shared/context/SessionProtectionContext';
 import ChatMessagesPane from '@/modules/chat/transcript/ChatMessagesPane';
 import ChatComposer from '@/modules/chat/composer/ChatComposer';
+import ClaudeUsageSummary from '@/modules/chat/composer/ClaudeUsageSummary';
 import CommandResultModal from '@/modules/chat/modals/CommandResultModal';
 
 type ChatInterfaceProps = {
@@ -265,6 +266,7 @@ function ChatInterface({
     backgroundSendPrompt,
     resolveBackgroundSendPrompt,
     queuedDraft,
+    steerQueuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
     pendingSteers,
@@ -576,6 +578,7 @@ function ChatInterface({
           )}
 
           <ChatComposer
+          performanceSummary={provider === 'claude' ? <ClaudeUsageSummary sessionId={selectedSession?.id || currentSessionId} /> : null}
           pendingPermissionRequests={pendingPermissionRequests}
           handlePermissionDecision={handlePermissionDecision}
           handleGrantToolPermission={handleGrantToolPermission}
@@ -613,6 +616,7 @@ function ChatInterface({
           onResolveBackgroundSendPrompt={resolveBackgroundSendPrompt}
           onEditQueuedDraft={editQueuedDraft}
           onDeleteQueuedDraft={deleteQueuedDraft}
+          onSteerQueuedDraft={steerQueuedDraft}
           onSendMenuChoice={handleSendMenuChoice}
           supportsSteering={supportsSteering}
           pendingSteers={pendingSteers}

@@ -841,6 +841,8 @@ export type QueuedDraft = {
  * `accepted`. Local to the tab that sent it.
  */
 export type PendingSteer = {
+  /** The server owns this queued draft until it accepts the move into the running turn. */
+  fromQueue?: boolean;
   /** The UUID the message was sent with; its transcript row and live echo carry it too. */
   messageId: string;
   /** The session whose turn it was sent into. */

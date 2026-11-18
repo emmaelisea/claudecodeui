@@ -145,6 +145,9 @@
     "clearInput": "清空输入",
     "scrollToBottom": "滚动到底部",
     "queue": {
+      "steerNow": "立即引导",
+      "steerNowDescription": "立即将这条排队消息交给当前任务",
+      "steerAccepted": "已交给 Claude，等待读取",
       "sendNext": "排队发送下一条消息",
       "append": "添加到排队消息",
       "notCombinable": "无法排队发送消息：斜杠命令会单独运行，因此不能与排队消息合并。请在排队消息发送后再发送。",
@@ -153,6 +156,13 @@
       "edit": "编辑排队消息",
       "delete": "删除排队消息"
     }
+  },
+  "usageMetrics": {
+    "label": "Claude 订阅用量与输出速度",
+    "fiveHour": "5 小时已用",
+    "week": "本周已用",
+    "resets": "重置时间 {{time}}",
+    "speedHint": "最近一次实测输出速度，包含思考 token，排除工具执行时间。测量于 {{time}}。"
   },
   "providerSelection": {
     "title": "选择您的 AI 助手",

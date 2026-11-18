@@ -29,7 +29,9 @@ export default function SteeredMessageCard({ steer, providerLabel }: SteeredMess
             <span className="normal-case text-muted-foreground/70" role="status">
               · {steer.status === 'sending'
                 ? t('input.steer.sending', { defaultValue: 'Sending…' })
-                : t('input.steer.willRead', { provider: providerLabel, defaultValue: '{{provider}} reads it at its next tool call' })}
+                : steer.fromQueue
+                  ? t('input.queue.steerAccepted')
+                  : t('input.steer.willRead', { provider: providerLabel, defaultValue: '{{provider}} reads it at its next tool call' })}
             </span>
           </div>
           <p className="mt-0.5 max-h-28 overflow-y-auto whitespace-pre-wrap break-words text-sm text-foreground/90">

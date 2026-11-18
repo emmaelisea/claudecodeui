@@ -230,6 +230,18 @@ test('a steer is refused for a session with no live run', async () => {
   assert.equal(await steerClaudeSDKSession('no-such-session', 'hello', { messageId: STEER_ID }), false);
 });
 
+test('an immediate steer uses the CLI now priority', async () => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    await settle();
+    assert.equal(await steerClaudeSDKSession(SESSION_ID, 'change course now', { messageId: STEER_ID, priority: 'now' }), true);
+    await waitFor(() => script.stdin.length === 2);
+    assert.equal(script.stdin[1].priority, 'now');
+    script.emit(echo(STEER_ID, 'change course now'));
+    script.emit(result());
+  });
+});
+
 test('history shows a message read mid-turn as the user\'s, under the id it was sent with', () => {
   const sessions = new ClaudeSessionsProvider({ getLiveRunStartTime: () => null });
   const row = {

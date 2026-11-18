@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { closeConnection, initializeDatabase, sessionsDb } from '@/modules/database/index.js';
+import { closeConnection, initializeDatabase, sessionDraftsDb, sessionsDb, userDb } from '@/modules/database/index.js';
 import { handleChatConnection } from '@/modules/websocket/services/chat-websocket.service.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients } from '@/modules/websocket/services/websocket-state.service.js';
@@ -33,7 +33,7 @@ type SteerCall = { provider: string; sessionId: string; command: string; options
  * `running` decides whether the session has a chat run in progress.
  */
 async function withGateway(
-  { accepts, running }: { accepts: boolean; running: boolean },
+  { accepts, running }: { accepts: boolean | Error; running: boolean },
   runTest: (context: { socket: ReturnType<typeof createFakeSocket>; steers: SteerCall[] }) => Promise<void>,
 ): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -42,6 +42,7 @@ async function withGateway(
   closeConnection();
   process.env.DATABASE_PATH = path.join(tempDirectory, 'auth.db');
   await initializeDatabase();
+  userDb.createUser('steer-test', 'unused');
 
   const steers: SteerCall[] = [];
   const socket = createFakeSocket();
@@ -66,6 +67,7 @@ async function withGateway(
           hasRuntime: () => true,
           steer: async (provider: string, sessionId: string, command: string, options: AnyRecord) => {
             steers.push({ provider, sessionId, command, options });
+            if (accepts instanceof Error) throw accepts;
             return accepts;
           },
         } as never,
@@ -88,6 +90,53 @@ async function withGateway(
 
 /** The handler is async and the socket listener does not await it. */
 const settle = () => new Promise((resolve) => { setTimeout(resolve, 30); });
+
+test('moving a queued card to steering claims it once even with duplicate clicks', async () => {
+  await withGateway({ accepts: true, running: true }, async ({ socket, steers }) => {
+    sessionDraftsDb.appendQueuedMessage(1, SESSION_ID, { content: 'change course', attachments: [] });
+    const frame = { type: 'chat.steer', sessionId: SESSION_ID, messageId: MESSAGE_ID, content: 'change course', fromQueue: true, options: { attachments: [] } };
+    socket.emit('message', JSON.stringify(frame));
+    socket.emit('message', JSON.stringify(frame));
+    await settle();
+    assert.equal(steers.length, 1);
+    assert.equal(steers[0].options.priority, 'now');
+    assert.equal(sessionDraftsDb.listQueuedMessages(SESSION_ID).length, 0);
+    assert.ok(socket.frames.some((frame) => frame.kind === 'chat_steer_accepted'));
+  });
+});
+
+test('refused steering restores the queued card and never starts a replacement turn', async () => {
+  await withGateway({ accepts: false, running: true }, async ({ socket, steers }) => {
+    sessionDraftsDb.appendQueuedMessage(1, SESSION_ID, { content: 'keep this', attachments: [] });
+    socket.emit('message', JSON.stringify({ type: 'chat.steer', sessionId: SESSION_ID, messageId: MESSAGE_ID, content: 'keep this', fromQueue: true }));
+    await settle();
+    assert.equal(steers.length, 1);
+    assert.equal(sessionDraftsDb.listQueuedMessages(SESSION_ID).length, 1);
+    assert.equal(socket.frames.at(-1)?.code, 'STEER_UNAVAILABLE');
+  });
+});
+
+test('an old card cannot consume messages appended from another tab', async () => {
+  await withGateway({ accepts: true, running: true }, async ({ socket, steers }) => {
+    sessionDraftsDb.appendQueuedMessage(1, SESSION_ID, { content: 'old', attachments: [] });
+    sessionDraftsDb.appendQueuedMessage(1, SESSION_ID, { content: 'new', attachments: [] });
+    socket.emit('message', JSON.stringify({ type: 'chat.steer', sessionId: SESSION_ID, messageId: MESSAGE_ID, content: 'old', fromQueue: true }));
+    await settle();
+    assert.equal(steers.length, 0);
+    assert.equal(sessionDraftsDb.listQueuedMessages(SESSION_ID).length, 1);
+  });
+});
+
+test('a runtime failure restores the queued message and identifies the refused steer', async () => {
+  await withGateway({ accepts: new Error('input closed'), running: true }, async ({ socket }) => {
+    sessionDraftsDb.appendQueuedMessage(1, SESSION_ID, { content: 'keep this', attachments: [] });
+    socket.emit('message', JSON.stringify({ type: 'chat.steer', sessionId: SESSION_ID, messageId: MESSAGE_ID, content: 'keep this', fromQueue: true }));
+    await settle();
+    assert.equal(sessionDraftsDb.listQueuedMessages(SESSION_ID).length, 1);
+    assert.equal(socket.frames.at(-1)?.code, 'STEER_UNAVAILABLE');
+    assert.equal(socket.frames.at(-1)?.messageId, MESSAGE_ID);
+  });
+});
 
 test('chat.steer hands the message to the session\'s provider runtime', async () => {
   await withGateway({ accepts: true, running: true }, async ({ socket, steers }) => {

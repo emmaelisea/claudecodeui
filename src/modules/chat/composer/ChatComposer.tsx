@@ -51,6 +51,7 @@ type MentionableFile = {
 const NO_PENDING_STEERS: PendingSteer[] = [];
 
 type ChatComposerProps = {
+  performanceSummary?: ReactNode;
   pendingPermissionRequests: PendingPermissionRequest[];
   handlePermissionDecision: (
     requestIds: string | string[],
@@ -95,6 +96,7 @@ type ChatComposerProps = {
   onCancelScheduledMessage: (id: string) => void;
   onEditQueuedDraft: () => void;
   onDeleteQueuedDraft: () => void;
+  onSteerQueuedDraft?: () => void;
   /** Handle send menu choices (queue, steer, side question, send). */
   onSendMenuChoice?: (choice: 'queue' | 'steer' | 'sideQuestion' | 'send') => void;
   /** False until the capability matrix has loaded, or for a provider it does not list; passed through to the send menu and the background-send dialog so neither offers a side question that would be refused. */
@@ -143,6 +145,7 @@ type ChatComposerProps = {
  * model/permission popovers that drive the next turn.
  */
 export default function ChatComposer({
+  performanceSummary,
   pendingPermissionRequests,
   handlePermissionDecision,
   handleGrantToolPermission,
@@ -180,6 +183,7 @@ export default function ChatComposer({
   onCancelScheduledMessage,
   onEditQueuedDraft,
   onDeleteQueuedDraft,
+  onSteerQueuedDraft,
   onSendMenuChoice,
   supportsSideQuestions,
   supportsSteering = false,
@@ -350,7 +354,7 @@ export default function ChatComposer({
         <SteeredMessageCard key={steer.messageId} steer={steer} providerLabel={providerLabel} />
       ))}
 
-      {queuedDraft && (
+      {queuedDraft && !pendingSteers.some((steer) => steer.fromQueue && steer.content === queuedDraft.content) && (
         <QueuedMessageCard
           content={queuedDraft.content}
           attachmentCount={
@@ -358,8 +362,11 @@ export default function ChatComposer({
           }
           onEdit={onEditQueuedDraft}
           onDelete={onDeleteQueuedDraft}
+          onSteer={isLoading && supportsSteering && !queuedDraft.content.trimStart().startsWith('/') && !pendingSteers.some((steer) => steer.fromQueue) ? onSteerQueuedDraft : undefined}
         />
       )}
+
+      {performanceSummary}
 
       {/* The question panel replaces the input, but how to answer often depends on
           how much context is left, so the token usage stays reachable below it. */}

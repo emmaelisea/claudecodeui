@@ -7,6 +7,7 @@ import { providerCliService } from '@/modules/providers/services/provider-cli.se
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { providerTokenUsageService } from '@/modules/providers/services/provider-token-usage.service.js';
+import { readClaudePerformance } from '@/modules/providers/services/claude-performance.service.js';
 import { providerSkillsService } from '@/modules/providers/services/skills.service.js';
 import { sessionConversationsSearchService } from '@/modules/providers/services/session-conversations-search.service.js';
 import { sideQuestionsService } from '@/modules/providers/services/side-questions.service.js';
@@ -24,6 +25,11 @@ import type {
 import { AppError, asyncHandler, createApiSuccessResponse, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
 
 const router = express.Router();
+
+router.get('/claude/performance', asyncHandler(async (req: Request, res: Response) => {
+  const sessionId = req.query.sessionId === undefined ? undefined : parseSessionId(req.query.sessionId);
+  res.json(createApiSuccessResponse(await readClaudePerformance(sessionId)));
+}));
 
 const readPathParam = (value: unknown, name: string): string => {
   if (typeof value === 'string') {
