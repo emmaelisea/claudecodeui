@@ -3,6 +3,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { synchronizeClaudeDesktopIndex } from '@/modules/providers/services/claude-desktop-index.service.js';
 import {
   buildLookupMap,
   extractFirstValidJsonlData,
@@ -101,6 +102,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       }
     }
 
+    await synchronizeClaudeDesktopIndex();
     return indexedFiles.size;
   }
 
@@ -122,7 +124,7 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
     }
 
     const timestamps = await readFileTimestamps(filePath);
-    return sessionsDb.createSession(
+    const sessionId = sessionsDb.createSession(
       parsed.sessionId,
       this.provider,
       parsed.projectPath,
@@ -131,6 +133,9 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
       timestamps.updatedAt,
       filePath
     );
+    const session = sessionsDb.getSessionById(sessionId);
+    if (session) await synchronizeClaudeDesktopIndex([session]);
+    return sessionId;
   }
 
   /**
