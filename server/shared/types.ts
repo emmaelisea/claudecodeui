@@ -801,10 +801,10 @@ export type ProviderRuntimePermissionGateway = {
  * adapters from importing services that resolve back through providerRegistry.
  */
 export type ProviderRuntimeContext = {
-  /** Claude session preferences shared with Desktop; absent in isolated runtime adapters/tests. */
+  /** Persisted Claude session permissions; absent in isolated runtime adapters/tests. */
   resolvePermissionMode?(sessionId: string, requested?: string): Promise<string | undefined>;
   /** Records the mode actually acknowledged by Claude's initialization event. */
-  onPermissionModeApplied?(sessionId: string, mode: string, nativeId: string): Promise<void>;
+  onPermissionModeApplied?(sessionId: string, mode: string): Promise<void>;
   resolveProviderSessionId(sessionId: string | null | undefined): string | null;
   resolveResumeModel(
     sessionId: string | undefined,

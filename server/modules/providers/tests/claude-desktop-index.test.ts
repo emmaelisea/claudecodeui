@@ -63,7 +63,7 @@ test('Desktop indexing registers missing CloudCLI sessions without replacing Des
     assert.equal(record.title, 'New CloudCLI conversation');
     assert.equal(record.cwd, root);
     assert.equal(record.isArchived, false);
-    assert.equal(record.permissionMode, 'auto');
+    assert.equal(record.permissionMode, 'default');
     assert.ok(Number.isFinite(record.createdAt));
     const fork = JSON.parse(await readFile(path.join(directory, `local_${forkNativeId}.json`), 'utf8'));
     assert.equal(fork.forkedFromSessionId, 'local_existing');

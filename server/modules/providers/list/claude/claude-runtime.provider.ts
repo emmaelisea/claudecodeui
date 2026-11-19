@@ -1645,8 +1645,8 @@ async function queryClaudeSDK(
       if (message.type === 'system' && message.subtype === 'init' && typeof message.permissionMode === 'string') {
         sdkOptions.permissionMode = message.permissionMode;
         if (sessionId && context.onPermissionModeApplied) {
-          try { await context.onPermissionModeApplied(sessionId, message.permissionMode, message.session_id); }
-          catch (error) { console.warn('Claude permission preference synchronization failed:', errorMessage(error)); }
+          try { await context.onPermissionModeApplied(sessionId, message.permissionMode); }
+          catch (error) { console.warn('Saving Claude permission preference failed:', errorMessage(error)); }
         }
         const active = sessionKey() ? getSession(sessionKey()!) : null;
         if (active?.instance === queryInstance) active.permissionModeInitialized = true;

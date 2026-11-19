@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { access, link, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { access, link, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { sessionsDb } from '@/modules/database/index.js';
@@ -65,7 +65,7 @@ export async function synchronizeClaudeDesktopIndex(
         ...(session.model && { model: session.model }),
         ...(session.effort && { effort: session.effort }),
         ...(parentDesktopId && { forkedFromSessionId: parentDesktopId }),
-        permissionMode: session.permission_mode || 'default',
+        permissionMode: 'default',
         adoptedFromOtherSurface: true,
         fromCliTranscript: true,
       };
@@ -87,49 +87,4 @@ export async function synchronizeClaudeDesktopIndex(
     console.warn('Claude Desktop session index synchronization failed:', error);
     return 0;
   }
-}
-
-/** Used by Claude session permissions to read the corresponding Desktop preference. */
-export async function readClaudeDesktopPermissionMode(nativeId: string, directory = process.env.CLAUDE_DESKTOP_SESSIONS_DIR): Promise<string | null> {
-  if (!directory) return null;
-  let files: string[];
-  try { files = await readdir(directory); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw error;
-  }
-  for (const name of files) {
-    if (!name.startsWith('local_') || !name.endsWith('.json')) continue;
-    const record = JSON.parse(await readFile(path.join(directory, name), 'utf8'));
-    if (record.cliSessionId === nativeId && typeof record.permissionMode === 'string') return record.permissionMode;
-  }
-  return null;
-}
-
-/** Used only after an explicit permission pick; preserves every other Desktop field. */
-export async function writeClaudeDesktopPermissionMode(nativeId: string, mode: string, directory = process.env.CLAUDE_DESKTOP_SESSIONS_DIR): Promise<boolean> {
-  if (!directory) return false;
-  let files: string[];
-  try { files = await readdir(directory); } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-    throw error;
-  }
-  for (const name of files) {
-    if (!name.startsWith('local_') || !name.endsWith('.json')) continue;
-    const file = path.join(directory, name);
-    const before = await readFile(file, 'utf8');
-    const record = JSON.parse(before);
-    if (record.cliSessionId !== nativeId) continue;
-    if (record.permissionMode === mode) return true;
-    const temporary = path.join(directory, `.cloudcli-${randomUUID()}.tmp`);
-    try {
-      await writeFile(temporary, JSON.stringify({ ...record, permissionMode: mode }), { flag: 'wx', mode: (await stat(file)).mode & 0o777 });
-      // Do not replace a newer Desktop save with the snapshot read above.
-      if (await readFile(file, 'utf8') !== before) throw new Error('Desktop session changed during permission update; retry.');
-      await rename(temporary, file);
-    } finally {
-      await unlink(temporary).catch(() => undefined);
-    }
-    return true;
-  }
-  return false;
 }
