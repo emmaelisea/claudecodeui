@@ -10,6 +10,7 @@ import { MarkdownWorkspaceContext } from '@/modules/chat/context/MarkdownWorkspa
 import { TranscriptSessionContext } from '@/modules/chat/context/TranscriptSessionContext';
 import { api } from '@/shared/api';
 import type {
+  PermissionMode,
   ChatMessage,
   Project,
   ProjectSession,
@@ -113,6 +114,8 @@ function ChatInterface({
     currentProviderModel,
     currentProviderModelOptions,
     permissionMode,
+    permissionModeChanging,
+    permissionModeError,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     availablePermissionModes,
@@ -234,6 +237,13 @@ function ChatInterface({
     }
   }, [handleClearContext, t]);
 
+  const handleSelectPermissionMode = useCallback((mode: PermissionMode) => {
+    void selectPermissionMode(mode, isProcessing, currentSessionId || selectedSession?.id);
+  }, [selectPermissionMode, isProcessing, currentSessionId, selectedSession?.id]);
+  const handleCyclePermissionMode = useCallback(() => {
+    cyclePermissionMode(isProcessing, currentSessionId || selectedSession?.id);
+  }, [cyclePermissionMode, isProcessing, currentSessionId, selectedSession?.id]);
+
   const {
     input,
     setInput,
@@ -296,7 +306,7 @@ function ChatInterface({
     currentSessionId,
     provider,
     permissionMode,
-    cyclePermissionMode,
+    cyclePermissionMode: handleCyclePermissionMode,
     currentProviderModel,
     currentProviderEffort,
     isLoading: isProcessing,
@@ -587,8 +597,10 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           canAbortSession={canAbortSession}
           permissionMode={permissionMode}
+          permissionModeChanging={permissionModeChanging}
+          permissionModeError={permissionModeError}
           availablePermissionModes={availablePermissionModes}
-          onSelectPermissionMode={selectPermissionMode}
+          onSelectPermissionMode={handleSelectPermissionMode}
           providerLabel={selectedProviderLabel}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}

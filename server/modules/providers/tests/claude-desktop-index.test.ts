@@ -34,6 +34,7 @@ test('Desktop indexing registers missing CloudCLI sessions without replacing Des
     const deleted = await seed('Deleted');
     await writeFile(path.join(directory, `deleted_${deleted.nativeId}`), '1795000000000');
     const fresh = await seed('New CloudCLI conversation');
+    sessionsDb.setSessionPermissionMode(fresh.id, 'auto');
     const forkNativeId = randomUUID();
     const forkPath = path.join(root, `${forkNativeId}.jsonl`);
     await writeFile(forkPath, '{}\n');
@@ -62,10 +63,11 @@ test('Desktop indexing registers missing CloudCLI sessions without replacing Des
     assert.equal(record.title, 'New CloudCLI conversation');
     assert.equal(record.cwd, root);
     assert.equal(record.isArchived, false);
-    assert.equal(record.permissionMode, 'default');
+    assert.equal(record.permissionMode, 'auto');
     assert.ok(Number.isFinite(record.createdAt));
     const fork = JSON.parse(await readFile(path.join(directory, `local_${forkNativeId}.json`), 'utf8'));
     assert.equal(fork.forkedFromSessionId, 'local_existing');
+    assert.equal(fork.permissionMode, 'default');
     assert.deepEqual(JSON.parse(await readFile(existingPath, 'utf8')), existingRecord);
     assert.equal(await synchronizeClaudeDesktopIndex(undefined, directory), 0);
     assert.equal((await readdir(directory)).length, 4);

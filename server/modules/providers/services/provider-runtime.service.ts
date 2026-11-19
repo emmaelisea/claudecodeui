@@ -1,3 +1,4 @@
+import { claudeSessionPermissionsService } from '@/modules/providers/services/claude-session-permissions.service.js';
 import { errorMessage } from '@/shared/utils.js';
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
@@ -57,6 +58,10 @@ export function createProviderRuntimeService(
     provider: IProvider,
   ): ProviderRuntimeContext => ({
     resolveProviderSessionId: dependencies.resolveProviderSessionId,
+    ...(provider.id === 'claude' ? {
+      resolvePermissionMode: claudeSessionPermissionsService.resolveStoredMode,
+      onPermissionModeApplied: claudeSessionPermissionsService.recordAppliedMode,
+    } : {}),
     resolveResumeModel: (sessionId, requestedModel) =>
       dependencies.resolveResumeModel(provider.id, sessionId, requestedModel),
     getProviderModels: async () => dependencies.getProviderModels(provider.id),

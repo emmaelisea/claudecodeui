@@ -308,6 +308,7 @@
     "answeredBy": "由 {{model}} 回答"
   },
   "composer": {
+    "permissionUpdateFailed": "权限状态未确认，暂保留原显示：{{message}}",
     "permissionHeading": "如何批准 {{provider}} 的操作？",
     "permissionCycleHint": "在输入框中按 Tab 切换模式",
     "permissionTriggerLabel": "{{mode}}：{{heading}}",

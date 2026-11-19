@@ -201,6 +201,7 @@
     }
   },
   "composer": {
+    "permissionUpdateFailed": "Could not confirm permission state; keeping the previous display: {{message}}",
     "reasoning": "Reasoning",
     "model": "Model",
     "effortDefault": "Default",

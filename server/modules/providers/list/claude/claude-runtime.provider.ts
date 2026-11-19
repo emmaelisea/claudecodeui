@@ -67,6 +67,9 @@ type ClaudeRuntimeWriter = ProviderRuntimeWriter & { updateWebSocket?(rawWs: unk
 
 type ActiveSession = {
   instance: ClaudeQuery;
+  /** Mutable options also read by canUseTool after a live mode switch. */
+  modeOptions: AnyRecord;
+  permissionModeInitialized: boolean;
   startTime: number;
   status: 'active' | 'aborted';
   writer: ClaudeRuntimeWriter | null;
@@ -399,7 +402,7 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
     sdkOptions.cwd = cwd;
   }
 
-  if (permissionMode && permissionMode !== 'default') {
+  if (permissionMode) {
     sdkOptions.permissionMode = permissionMode;
   }
 
@@ -409,9 +412,13 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
     skipPermissions: false
   };
 
-  if (settings.skipPermissions && permissionMode !== 'plan') {
+  if (settings.skipPermissions && !permissionMode) {
     sdkOptions.permissionMode = 'bypassPermissions';
   }
+
+  // Allows a later explicit switch into bypass mode; this flag alone does not
+  // bypass approvals. The active permissionMode still governs every tool.
+  sdkOptions.allowDangerouslySkipPermissions = true;
 
   let allowedTools = [...(settings.allowedTools || [])];
 
@@ -482,6 +489,7 @@ function addSession(
   writer: ClaudeRuntimeWriter | null = null,
   releaseInput: (() => void) | null = null,
   steerInput: SteerInput | null = null,
+  modeOptions: AnyRecord = {},
 ) {
   const existing = activeSessions.get(sessionId);
   // A different live instance under the same key means an earlier run was
@@ -509,6 +517,8 @@ function addSession(
   const carried = superseding ? null : existing;
   const sessionEntry: ActiveSession = {
     instance: queryInstance,
+    modeOptions,
+    permissionModeInitialized: carried?.permissionModeInitialized || false,
     startTime: carried?.startTime || Date.now(),
     status: 'active',
     writer,
@@ -1324,9 +1334,13 @@ async function queryClaudeSDK(
       console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
     }
 
+    const resolvedPermissionMode = sessionId && context.resolvePermissionMode
+      ? await context.resolvePermissionMode(sessionId, options.permissionMode)
+      : options.permissionMode;
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
       providerSessionId,
+      permissionMode: resolvedPermissionMode,
       model: resolvedModel || options.model,
       effortModels,
     });
@@ -1543,7 +1557,7 @@ async function queryClaudeSDK(
 
     // Track the query instance for abort capability
     if (sessionKey()) {
-      addSession(sessionKey()!, queryInstance, ws, releasePromptStream, steerIntoTurn);
+      addSession(sessionKey()!, queryInstance, ws, releasePromptStream, steerIntoTurn, sdkOptions);
     }
 
     // Settles a turn whose `result` has arrived: tells the client the turn is
@@ -1628,11 +1642,20 @@ async function queryClaudeSDK(
     for await (const rawMessage of queryInstance) {
       const message = rawMessage as AnyRecord;
       measureOutput(message);
+      if (message.type === 'system' && message.subtype === 'init' && typeof message.permissionMode === 'string') {
+        sdkOptions.permissionMode = message.permissionMode;
+        if (sessionId && context.onPermissionModeApplied) {
+          try { await context.onPermissionModeApplied(sessionId, message.permissionMode, message.session_id); }
+          catch (error) { console.warn('Claude permission preference synchronization failed:', errorMessage(error)); }
+        }
+        const active = sessionKey() ? getSession(sessionKey()!) : null;
+        if (active?.instance === queryInstance) active.permissionModeInitialized = true;
+      }
       // Capture session ID from first message
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(sessionKey()!, queryInstance, ws, releasePromptStream, steerIntoTurn);
+        addSession(sessionKey()!, queryInstance, ws, releasePromptStream, steerIntoTurn, sdkOptions);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -1873,6 +1896,26 @@ async function queryClaudeSDK(
     }
     releasePromptStream();
   }
+}
+
+/** Used by Claude session permissions to report the live process's acknowledged mode. */
+export function getClaudeSDKPermissionMode(sessionId: string): string | undefined {
+  const session = getSession(sessionId);
+  return session?.status === 'active' && !session.inputReleased && session.permissionModeInitialized
+    ? session.modeOptions.permissionMode as string | undefined : undefined;
+}
+
+/** Used by Claude session permissions to change a running process without starting another turn. */
+export async function setClaudeSDKPermissionMode(sessionId: string, mode: string): Promise<boolean> {
+  const session = getSession(sessionId);
+  if (!session || session.status !== 'active' || session.inputReleased) return false;
+  if (!session.permissionModeInitialized) throw new Error('Claude has not confirmed its initial permission mode yet; retry shortly.');
+  if (!session.instance.setPermissionMode) throw new Error('This Claude runtime cannot change permissions while running.');
+  await session.instance.setPermissionMode(mode);
+  const current = getSession(sessionId);
+  if (current && current.instance !== session.instance) return false;
+  session.modeOptions.permissionMode = mode;
+  return true;
 }
 
 /**

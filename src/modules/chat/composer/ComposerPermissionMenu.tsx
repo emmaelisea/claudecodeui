@@ -80,6 +80,7 @@ const getAppearance = (mode: PermissionMode | string): ModeAppearance =>
 
 type ComposerPermissionMenuProps = {
   permissionMode: PermissionMode;
+  disabled?: boolean;
   /** Modes the active provider supports, in the order the backend reports them. */
   permissionModes: PermissionMode[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
@@ -88,10 +89,11 @@ type ComposerPermissionMenuProps = {
 
 /**
  * Rendered by chat's ChatComposer as the popover for choosing the permission
- * mode the active provider runs the next turn under.
+ * mode. Claude sessions wait for a live server acknowledgment before updating.
  */
 function ComposerPermissionMenu({
   permissionMode,
+  disabled = false,
   permissionModes,
   onSelectPermissionMode,
   providerLabel,
@@ -128,6 +130,8 @@ function ComposerPermissionMenu({
     <>
       <button
         ref={triggerRef}
+        disabled={disabled}
+        aria-busy={disabled}
         type="button"
         onClick={() => {
           updateAnchor();

@@ -64,6 +64,8 @@ type ChatComposerProps = {
   /** Whether the viewed session can currently be interrupted; threaded to the send menu's Stop row, which otherwise looks actionable while `onAbortSession` already no-ops. Defaults to true so existing callers and tests, which never had a non-interruptible turn, keep working. */
   canAbortSession?: boolean;
   permissionMode: PermissionMode;
+  permissionModeChanging?: boolean;
+  permissionModeError?: string | null;
   availablePermissionModes: PermissionMode[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
   providerLabel: string;
@@ -154,6 +156,8 @@ export default function ChatComposer({
   onAbortSession,
   canAbortSession = true,
   permissionMode,
+  permissionModeChanging = false,
+  permissionModeError,
   availablePermissionModes,
   onSelectPermissionMode,
   providerLabel,
@@ -303,6 +307,12 @@ export default function ChatComposer({
 
   return (
     <div className="chat-composer-shell relative flex-shrink-0 px-2 pb-2 pt-0 sm:px-4 sm:pb-4 md:px-4 md:pb-6">
+      {permissionModeError && (
+        <p role="alert" className="mx-auto mb-2 max-w-[54.25rem] text-xs text-destructive">
+          {t('composer.permissionUpdateFailed', { message: permissionModeError })}
+        </p>
+      )}
+
       {pendingPermissionRequests.length > 0 && (
         <div className="mx-auto mb-3 max-w-[54.25rem]">
           <PermissionRequestsBanner
@@ -556,6 +566,7 @@ export default function ChatComposer({
 
             <ComposerPermissionMenu
               permissionMode={permissionMode}
+              disabled={permissionModeChanging}
               permissionModes={availablePermissionModes}
               onSelectPermissionMode={onSelectPermissionMode}
               providerLabel={providerLabel}

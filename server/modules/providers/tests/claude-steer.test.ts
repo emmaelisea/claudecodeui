@@ -9,6 +9,8 @@ import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude
 import {
   queryClaudeSDK,
   steerClaudeSDKSession,
+  getClaudeSDKPermissionMode,
+  setClaudeSDKPermissionMode,
 } from '@/modules/providers/list/claude/claude-runtime.provider.js';
 import type { AnyRecord, NormalizedMessage, ProviderRuntimeContext } from '@/shared/types.js';
 
@@ -31,6 +33,7 @@ type Scripted = {
   released: () => boolean;
   /** Every message the runtime wrote to the CLI's stdin, in order. */
   stdin: AnyRecord[];
+  permissionModes: string[];
   /** The options the runtime started the query with. */
   options: () => AnyRecord | null;
 };
@@ -47,7 +50,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
     stdin,
-    options: () => startedWith,
+    permissionModes: [],    options: () => startedWith,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt, options }) => {
@@ -75,6 +78,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     })();
 
     return Object.assign(iterator, {
+      setPermissionMode: async (mode: string) => { script.permissionModes.push(mode); },
       interrupt: async () => {},
       stopTask: async () => {},
     });
@@ -85,6 +89,8 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
 
 async function withRun(
   runTest: (context: { script: Scripted; sent: NormalizedMessage[] }) => Promise<void>,
+  permissionMode?: string,
+  optionsOverride: AnyRecord = {},
 ): Promise<void> {
   const cwd = await mkdtemp(path.join(os.tmpdir(), 'claude-steer-'));
   const { createQuery, script } = createScriptedQuery();
@@ -101,7 +107,7 @@ async function withRun(
   };
 
   try {
-    const done = queryClaudeSDK('run four commands', { sessionId: SESSION_ID, cwd }, writer as never, context);
+    const done = queryClaudeSDK('run four commands', { sessionId: SESSION_ID, cwd, permissionMode, ...optionsOverride }, writer as never, context);
     await waitFor(() => script.stdin.length > 0);
     await runTest({ script, sent });
     script.end();
@@ -332,4 +338,24 @@ test('a streamed subagent report reaches the client as assistant output', async 
     assert.equal(userTexts(sent).length, 0);
     script.emit(result());
   });
+});
+
+
+test('a live mode change updates both the CLI and the approval callback options, including explicit default', async () => {
+  await withRun(async ({ script }) => {
+    assert.equal(script.options()?.permissionMode, 'default');
+    assert.equal(script.options()?.allowDangerouslySkipPermissions, true);
+    await assert.rejects(setClaudeSDKPermissionMode(SESSION_ID, 'bypassPermissions'), /not confirmed/);
+    script.emit({ ...init(), permissionMode: 'default' });
+    await settle();
+    assert.equal(await setClaudeSDKPermissionMode(SESSION_ID, 'bypassPermissions'), true);
+    assert.equal(getClaudeSDKPermissionMode(SESSION_ID), 'bypassPermissions');
+    assert.equal(script.options()?.permissionMode, 'bypassPermissions');
+    assert.equal(await setClaudeSDKPermissionMode(SESSION_ID, 'default'), true);
+    assert.equal(getClaudeSDKPermissionMode(SESSION_ID), 'default');
+    assert.deepEqual(script.permissionModes, ['bypassPermissions', 'default']);
+    script.emit(init());
+    script.emit(result());
+  }, 'default', { toolsSettings: { skipPermissions: true } });
+  assert.equal(await setClaudeSDKPermissionMode(SESSION_ID, 'bypassPermissions'), false);
 });

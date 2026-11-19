@@ -132,11 +132,20 @@ const getSessionSelectionKey = (provider: LLMProvider, sessionId: string): strin
 
 export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
+  // Permission choices are shown only after the server acknowledges the live change.
+  const [permissionModeChanging, setPermissionModeChanging] = useState(false);
+  // A failed read/change keeps the last choice visible with an explicit error.
+  const [permissionModeError, setPermissionModeError] = useState<string | null>(null);
+  const permissionChangePendingRef = useRef(false);
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   // The provider the composer sends under. Held here rather than read from
   // storage per render because switching it has to reset the model menu, the
   // permission mode and the session in one commit.
   const [provider, setProvider] = useState<LLMProvider>(readSelectedProvider);
+  const permissionScope = `${provider}:${selectedSession?.id || ''}`;
+  const permissionScopeRef = useRef(permissionScope);
+  permissionScopeRef.current = permissionScope;
+  const permissionRequestVersionRef = useRef(0);
   // Every provider's chosen model, not just the active one: switching provider
   // must restore the model that provider was last used with, and the catalogue
   // that validates them arrives asynchronously per provider.
@@ -401,6 +410,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   }, [providerEfforts, providerModels, reconcileStoredEffort]);
 
   useEffect(() => {
+    setPermissionModeError(null);
     const validModes = getPermissionModesForProvider(provider);
     const sessionSavedMode = selectedSession?.id
       ? (localStorage.getItem(`permissionMode-${selectedSession.id}`) as PermissionMode | null)
@@ -433,24 +443,63 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     );
   }, [selectedSession?.id]);
 
-  const selectPermissionMode = useCallback((nextMode: PermissionMode) => {
-    setPermissionMode(nextMode);
+  useEffect(() => {
+    let cancelled = false;
+    if (provider !== 'claude' || !selectedSession?.id || permissionModeChanging) return;
+    const version = permissionRequestVersionRef.current;
+    const id = selectedSession.id;
+    const load = async () => {
+      try {
+        const response = await api.providers.claudeSessionPermissionMode(id);
+        const body = await response.json();
+        if (!response.ok || !body.success) throw new Error(body.error?.message || 'Unable to read session permissions.');
+        const mode = body.data?.permissionMode as PermissionMode;
+        if (!getPermissionModesForProvider(provider).includes(mode)) throw new Error('Claude reported an unsupported permission mode.');
+        if (!cancelled && version === permissionRequestVersionRef.current && !permissionChangePendingRef.current && getPermissionModesForProvider(provider).includes(mode)) {
+          setPermissionMode(mode);
+          localStorage.setItem(`permissionMode-${id}`, mode);
+        }
+      } catch (error) {
+        if (!cancelled && version === permissionRequestVersionRef.current) setPermissionModeError(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [provider, selectedSession?.id, getPermissionModesForProvider, permissionModeChanging]);
 
-    // Persist per provider as well as per session: a brand-new chat has no
-    // session id yet, and the per-provider key keeps the choice sticky when
-    // the real id arrives (and for future sessions of this provider).
-    localStorage.setItem(`permissionMode-last-${provider}`, nextMode);
-    if (selectedSession?.id) {
-      localStorage.setItem(`permissionMode-${selectedSession.id}`, nextMode);
+  const selectPermissionMode = useCallback(async (nextMode: PermissionMode, requireRuntime = false, sessionIdOverride?: string | null) => {
+    if (permissionChangePendingRef.current) return;
+    const scope = permissionScopeRef.current;
+    permissionRequestVersionRef.current += 1;
+    const id = sessionIdOverride || selectedSession?.id;
+    setPermissionModeError(null);
+    permissionChangePendingRef.current = true;
+    setPermissionModeChanging(true);
+    try {
+      if (provider === 'claude' && id) {
+        const response = await api.providers.setClaudeSessionPermissionMode(id, nextMode, requireRuntime);
+        const body = await response.json();
+        if (!response.ok || !body.success || body.data?.permissionMode !== nextMode) {
+          throw new Error(body.error?.message || 'Claude did not acknowledge the permission change.');
+        }
+      }
+      localStorage.setItem(`permissionMode-last-${provider}`, nextMode);
+      if (id) localStorage.setItem(`permissionMode-${id}`, nextMode);
+      if (permissionScopeRef.current === scope) setPermissionMode(nextMode);
+    } catch (error) {
+      if (permissionScopeRef.current === scope) setPermissionModeError(error instanceof Error ? error.message : String(error));
+    } finally {
+      permissionChangePendingRef.current = false;
+      setPermissionModeChanging(false);
     }
   }, [provider, selectedSession?.id]);
 
-  const cyclePermissionMode = useCallback(() => {
+  const cyclePermissionMode = useCallback((requireRuntime = false, sessionIdOverride?: string | null) => {
     const modes = getPermissionModesForProvider(provider);
 
     const currentIndex = modes.indexOf(permissionMode);
     const nextIndex = (currentIndex + 1) % modes.length;
-    selectPermissionMode(modes[nextIndex]);
+    void selectPermissionMode(modes[nextIndex], requireRuntime, sessionIdOverride);
   }, [permissionMode, provider, getPermissionModesForProvider, selectPermissionMode]);
 
   const availablePermissionModes = useMemo(
@@ -833,6 +882,8 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     currentProviderModel,
     currentProviderModelOptions,
     permissionMode,
+    permissionModeChanging,
+    permissionModeError,
     pendingPermissionRequests,
     setPendingPermissionRequests,
     availablePermissionModes,

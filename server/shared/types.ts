@@ -801,6 +801,10 @@ export type ProviderRuntimePermissionGateway = {
  * adapters from importing services that resolve back through providerRegistry.
  */
 export type ProviderRuntimeContext = {
+  /** Claude session preferences shared with Desktop; absent in isolated runtime adapters/tests. */
+  resolvePermissionMode?(sessionId: string, requested?: string): Promise<string | undefined>;
+  /** Records the mode actually acknowledged by Claude's initialization event. */
+  onPermissionModeApplied?(sessionId: string, mode: string, nativeId: string): Promise<void>;
   resolveProviderSessionId(sessionId: string | null | undefined): string | null;
   resolveResumeModel(
     sessionId: string | undefined,
@@ -822,6 +826,7 @@ export type ProviderRuntimeContext = {
   createQuery?: (input: { prompt: AsyncIterable<unknown>; options: AnyRecord }) => AsyncIterable<unknown> & {
     interrupt(): Promise<unknown>;
     stopTask?(taskId: string): Promise<void>;
+    setPermissionMode?(mode: string): Promise<void>;
   };
 };
 

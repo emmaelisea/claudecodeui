@@ -455,6 +455,10 @@ export const api = {
     ) => get(sessionMessagesUrl(sessionId, pagination), options),
     sessionTokenUsage: (sessionId: string) =>
       get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/token-usage`),
+    claudeSessionPermissionMode: (sessionId: string) =>
+      get(`/api/providers/claude/sessions/${encodeURIComponent(sessionId)}/permission-mode`),
+    setClaudeSessionPermissionMode: (sessionId: string, permissionMode: string, requireRuntime = false) =>
+      post(`/api/providers/claude/sessions/${encodeURIComponent(sessionId)}/permission-mode`, { permissionMode, requireRuntime }),
     claudePerformance: (sessionId?: string | null) =>
       get(`/api/providers/claude/performance${sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`),
     sessionActiveModel: (provider: string, sessionId: string) =>
