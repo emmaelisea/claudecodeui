@@ -63,7 +63,7 @@ export default function ClaudeUsageSummary({ sessionId }: { sessionId?: string |
       {sevenDay}
       {speed && (
         <span title={t('usageMetrics.speedHint', { time: new Date(speed.measuredAt).toLocaleTimeString() })}>
-          {speed.tokensPerSecond.toFixed(1)} tok/s
+          {t('usageMetrics.averageSpeed', { speed: speed.tokensPerSecond.toFixed(1) })}
         </span>
       )}
     </div>

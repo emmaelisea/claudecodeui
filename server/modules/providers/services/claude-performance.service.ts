@@ -62,35 +62,29 @@ async function refreshLimits(): Promise<void> {
 }
 
 /** Used by the Claude runtime to retain a measured main-agent output rate. */
-export function rememberClaudeOutputSpeed(sessionId: string, tokens: number, milliseconds: number): void {
+function rememberClaudeOutputSpeed(sessionId: string, tokens: number, milliseconds: number): void {
   if (!sessionId || !Number.isFinite(tokens) || tokens <= 0 || !Number.isFinite(milliseconds) || milliseconds < 50) return;
   outputSpeeds.delete(sessionId);
   outputSpeeds.set(sessionId, { tokensPerSecond: tokens * 1000 / milliseconds, measuredAt: Date.now() });
   if (outputSpeeds.size > 1000) outputSpeeds.delete(outputSpeeds.keys().next().value!);
 }
 
-/** Used by each Claude run to measure output from SDK token counts and stream timings, excluding tool execution. */
+/** Used by the Claude runtime for effective output per second over a completed turn, including tools and waiting. */
 export function createClaudeOutputMeter(
   sessionId: string,
-  now = () => performance.now(),
   record = rememberClaudeOutputSpeed,
 ) {
-  let startedAt: number | null = null;
-  let outputTokens = 0;
   return (message: AnyRecord) => {
-    if (message.type !== 'stream_event' || message.parent_tool_use_id) return;
-    const event = message.event;
-    if (event?.type === 'message_start') {
-      startedAt = null;
-      outputTokens = 0;
-    } else if (event?.type === 'content_block_delta') {
-      startedAt ??= now();
-    } else if (event?.type === 'message_delta' && typeof event.usage?.output_tokens === 'number') {
-      outputTokens = event.usage.output_tokens;
-    } else if (event?.type === 'message_stop' && startedAt !== null) {
-      record(sessionId, outputTokens, now() - startedAt);
-      startedAt = null;
-    }
+    // Delivery timestamps measure buffering/IPC, not generation. The result's
+    // usage and wall duration both cover this turn, including in streaming input
+    // mode. modelUsage is cumulative and must not be mixed with this duration.
+    if (message.type !== 'result' || message.parent_tool_use_id || message.subtype !== 'success'
+      || message.is_error || message.local_command) return;
+    const tokens = message.usage?.output_tokens;
+    const milliseconds = message.duration_ms;
+    if (typeof tokens !== 'number' || !Number.isFinite(tokens) || tokens <= 0
+      || typeof milliseconds !== 'number' || !Number.isFinite(milliseconds) || milliseconds < 50) return;
+    record(sessionId, tokens, milliseconds);
   };
 }
 

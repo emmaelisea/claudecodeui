@@ -162,7 +162,8 @@
     "fiveHour": "5 小时已用",
     "week": "本周已用",
     "resets": "重置时间 {{time}}",
-    "speedHint": "最近一次实测输出速度，包含思考 token，排除工具执行时间。测量于 {{time}}。"
+    "averageSpeed": "平均 {{speed}} tok/s",
+    "speedHint": "最近一轮的主助手输出 token 数 ÷ 整轮总耗时，包含思考、等待和工具执行，不代表模型纯生成速度。测量于 {{time}}。"
   },
   "providerSelection": {
     "title": "选择您的 AI 助手",

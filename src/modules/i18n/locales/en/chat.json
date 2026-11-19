@@ -220,7 +220,8 @@
     "fiveHour": "5h used",
     "week": "Week used",
     "resets": "Resets {{time}}",
-    "speedHint": "Latest measured output speed, including thinking tokens and excluding tool execution. Measured {{time}}."
+    "averageSpeed": "Avg {{speed}} tok/s",
+    "speedHint": "Latest completed turn: main-agent output tokens divided by total turn time, including thinking, waiting and tools. Not model decoding speed. Measured {{time}}."
   },
   "providerSelection": {
     "title": "Choose Your AI Assistant",

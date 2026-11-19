@@ -18,7 +18,7 @@ test('real zero usage is shown and measured speed is formatted beside it', async
     speed: { tokensPerSecond: 42.25, measuredAt: 1795000000000 },
   }));
   render(<ClaudeUsageSummary sessionId="one" />);
-  expect(await screen.findByText('42.3 tok/s')).toBeTruthy();
+  expect(await screen.findByText(/42\.3 tok\/s/)).toBeTruthy();
   expect(screen.getByText(/0%/)).toBeTruthy();
   expect(screen.getByText(/27%/)).toBeTruthy();
 });
