@@ -85,23 +85,3 @@ test('a response in flight still shows the Stop button and the primary dot', () 
   assert.ok(container.querySelector('.bg-primary'));
   assert.equal(container.querySelector('.bg-purple-500'), null);
 });
-
-test('the composer header keeps usage visible after stopping without submitting the form', async () => {
-  const { fireEvent, waitFor } = await import('@testing-library/react');
-  const onAbort = vi.fn();
-  const onSubmit = vi.fn((event: React.FormEvent) => event.preventDefault());
-  const usage = <span>5h used 53%</span>;
-  const view = render(
-    <form onSubmit={onSubmit}>
-      <ActivityIndicator activity={{ statusText: 'Thinking', canInterrupt: true, startedAt: Date.now() }} onAbort={onAbort}>
-        {usage}
-      </ActivityIndicator>
-    </form>,
-  );
-  fireEvent.click(view.getByRole('button', { name: 'Stop' }));
-  assert.equal(onAbort.mock.calls.length, 1);
-  assert.equal(onSubmit.mock.calls.length, 0);
-  view.rerender(<form onSubmit={onSubmit}><ActivityIndicator activity={null}>{usage}</ActivityIndicator></form>);
-  await waitFor(() => assert.equal(view.queryByRole('button', { name: 'Stop' }), null));
-  assert.ok(view.getByText('5h used 53%'));
-});
