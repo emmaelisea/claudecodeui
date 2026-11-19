@@ -305,3 +305,27 @@ test('supportsSideQuestions false leaves the side-question button out of the bac
     .filter((name) => name !== '');
   assert.deepEqual(names, ['Cancel', 'Queue', 'Send anyway']);
 });
+
+test('a steering card precedes the activity tabs and input as one stack, with Chinese state text', async () => {
+  const { i18n } = await import('@/modules/i18n');
+  await i18n.changeLanguage('zh-CN');
+  try {
+    const { container } = render(<UiPreferencesProvider><ChatComposer {...props({
+      isLoading: true,
+      activity: { statusText: 'Working', canInterrupt: true, startedAt: Date.now() },
+      pendingSteers: [{ messageId: 'steer-one', sessionKey: 'session-one', content: '先记录这个结论', attachments: [], uploadedAttachments: [], status: 'accepted' }],
+    })} /></UiPreferencesProvider>);
+    const card = screen.getByText('先记录这个结论');
+    assert.ok(screen.getByText('引导中'));
+    assert.ok(screen.getByText(/Claude 将在下一次工具调用时读取/));
+    const stack = container.querySelector('[data-slot="composer-input-stack"]')!;
+    const tabs = stack.querySelector('[data-slot="composer-activity"]')!;
+    const form = stack.querySelector('form')!;
+    assert.equal(tabs.parentElement, form.parentElement);
+    assert.ok(card.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(tabs.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING);
+    assert.ok(!stack.contains(card));
+  } finally {
+    await i18n.changeLanguage('en');
+  }
+});

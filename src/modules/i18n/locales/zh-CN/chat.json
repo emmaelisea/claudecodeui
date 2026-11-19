@@ -155,6 +155,37 @@
       "willSend": "将在当前完成后发送",
       "edit": "编辑排队消息",
       "delete": "删除排队消息"
+    },
+    "steer": {
+      "label": "引导中",
+      "sending": "正在发送…",
+      "willRead": "{{provider}} 将在下一次工具调用时读取",
+      "attachments_one": "已附加 {{count}} 个文件",
+      "attachments_other": "已附加 {{count}} 个文件"
+    }
+  },
+  "sendMenu": {
+    "trigger": "发送选项",
+    "queue": {
+      "label": "排队",
+      "descriptionResponding": "本轮结束后发送",
+      "descriptionBackground": "后台任务结束后发送"
+    },
+    "steer": {
+      "label": "引导",
+      "description": "发送到当前任务，在下一次工具调用时读取"
+    },
+    "sideQuestion": {
+      "label": "旁支提问",
+      "description": "立即单独提问，不加入当前会话"
+    },
+    "stop": {
+      "label": "停止",
+      "description": "停止当前回复"
+    },
+    "sendAnyway": {
+      "label": "仍然发送",
+      "description": "立即发送，这会停止后台任务"
     }
   },
   "usageMetrics": {
