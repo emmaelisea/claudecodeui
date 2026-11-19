@@ -366,8 +366,6 @@ export default function ChatComposer({
         />
       )}
 
-      {performanceSummary}
-
       {/* The question panel replaces the input, but how to answer often depends on
           how much context is left, so the token usage stays reachable below it. */}
       {hasQuestionPanel && (
@@ -625,12 +623,15 @@ export default function ChatComposer({
             )}
           </div>
 
-          <div
-            className={`order-last hidden basis-full px-2 text-center text-xs leading-4 text-muted-foreground/50 transition-opacity duration-200 lg:block ${
+          <div className="order-last flex basis-full flex-wrap items-center justify-center gap-x-3 gap-y-1 px-2 text-center text-xs leading-4">
+            <span
+            className={`hidden text-muted-foreground/50 transition-opacity duration-200 lg:inline ${
               input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
             }`}
           >
             {submitHint}
+            </span>
+            {performanceSummary}
           </div>
         </PromptInputFooter>
       </PromptInput>

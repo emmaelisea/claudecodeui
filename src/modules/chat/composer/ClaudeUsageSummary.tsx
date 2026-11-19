@@ -58,7 +58,7 @@ export default function ClaudeUsageSummary({ sessionId }: { sessionId?: string |
     ? data.speed : null;
   if (!fiveHour && !sevenDay && !speed) return null;
   return (
-    <div className="mx-auto mb-1.5 flex max-w-[54.25rem] flex-wrap justify-end gap-x-3 gap-y-1 px-1 text-[11px] tabular-nums text-muted-foreground" aria-label={t('usageMetrics.label')}>
+    <div className="inline-flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] tabular-nums text-muted-foreground" aria-label={t('usageMetrics.label')}>
       {fiveHour}
       {sevenDay}
       {speed && (
