@@ -186,6 +186,13 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
  */
 const builtInCommands = [
   {
+    name: "/compact",
+    description: "Summarize conversation history, preserving important context (optional focus instructions)",
+    namespace: "builtin",
+    type: "provider",
+    metadata: { type: "builtin", provider: "claude" },
+  },
+  {
     name: "/help",
     description: "Show help documentation for Claude Code",
     namespace: "builtin",

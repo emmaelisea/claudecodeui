@@ -122,10 +122,14 @@ export function useProjectSlashCommands(
         const skillCommands = dedupeProviderSkills(skillsData?.data?.skills || [])
           .map(mapSkillToSlashCommand);
         const allCommands: SlashCommand[] = [
-          ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
-            ...command,
-            type: 'built-in',
-          })),
+          ...((data.builtIn || []) as SlashCommand[])
+            .filter((command) => !command.metadata?.provider || command.metadata.provider === provider)
+            .map((command) => ({
+              ...command,
+              // Native commands are completed here but executed by the agent,
+              // rather than intercepted as CloudCLI settings/modal actions.
+              type: command.type === 'provider' ? 'provider' : 'built-in',
+            })),
           ...skillCommands,
           ...((data.custom || []) as SlashCommand[]).map((command) => ({
             ...command,
