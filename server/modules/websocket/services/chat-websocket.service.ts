@@ -29,7 +29,7 @@ import type {
   SideQuestionEvent,
   SideQuestionRuntime,
 } from '@/shared/types.js';
-import { parseIncomingJsonObject, readQueuedChatMessage, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
+import { createNormalizedMessage, parseIncomingJsonObject, readQueuedChatMessage, SIDE_QUESTION_ID_PATTERN } from '@/shared/utils.js';
 
 /**
  * Trust boundary for client-supplied image attachments: chat.send options come
@@ -260,11 +260,14 @@ async function dispatchRun(
 
   if (!run) {
     if (ws) {
+      // A tab that tried to send should still see the active turn finish.
+      chatRunRegistry.attachConnection(sessionId, ws);
       sendProtocolError(
         ws,
         'RUN_IN_PROGRESS',
         `Session "${sessionId}" already has a run in progress.`,
-        sessionId
+        sessionId,
+        typeof data.messageId === 'string' ? { messageId: data.messageId } : {},
       );
     }
     return { started: false, error: 'A run is already in progress for this session.' };
@@ -306,6 +309,9 @@ async function dispatchRun(
 
   let failure: string | null = null;
   try {
+    if (!ws) {
+      run.writer.send(createNormalizedMessage({ kind: 'chat_run_started', provider, sessionId }));
+    }
     // Runs only now that the session is reserved, because an edit rewinds the
     // conversation here and a rewind for a run that was never admitted cannot
     // be taken back. Inside the try so a rewind that throws still releases the

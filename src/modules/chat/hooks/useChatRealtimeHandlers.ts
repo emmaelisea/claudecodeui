@@ -177,6 +177,11 @@ export function useChatRealtimeHandlers({
           return;
         }
 
+        case 'chat_run_started': {
+          if (sid) onSessionProcessing?.(sid);
+          return;
+        }
+
         case 'chat_steer_accepted': {
           // Only the tab that sent the message gets this; it is not a
           // transcript row.
@@ -232,7 +237,14 @@ export function useChatRealtimeHandlers({
             // the run never started (or was rejected), so no `complete` follows.
             // A refused or failed stop request is not about the run, and
             // idling here would drop a response in flight on that session.
-            if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TASK_STOP_FAILED') {
+            if (msg.code === 'RUN_IN_PROGRESS') {
+              // The other turn is still running. Only retract the rejected
+              // local row, even if it had the same text as the accepted turn.
+              if (typeof msg.messageId === 'string' && msg.messageId.startsWith('local_')) {
+                sessionStore.removeRealtime(sid, msg.messageId);
+              }
+              onSessionProcessing?.(sid);
+            } else if (msg.code !== 'NO_SUCH_TASK' && msg.code !== 'TASK_ID_REQUIRED' && msg.code !== 'TASK_STOP_FAILED') {
               onSessionIdle?.(sid);
             }
             sessionStore.appendRealtime(sid, {

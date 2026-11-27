@@ -228,10 +228,8 @@ export const chatRunRegistry = {
     provider: LLMProvider;
     providerSessionId: string | null;
     /**
-     * The socket that asked for this run, or `null` for one nobody is watching
-     * — a scheduled message fires with no browser attached. The writer's event
-     * buffer still records everything, so a client that subscribes later
-     * replays the run from its start.
+     * The socket that asked for this run, or `null` for a dispatcher send.
+     * A dispatcher's turn carries over any audience from the preceding run.
      */
     connection: RealtimeClientConnection | null;
     userId: string | number | null;
@@ -241,12 +239,14 @@ export const chatRunRegistry = {
       return null;
     }
 
+    const previous = input.connection === null ? existing : undefined;
     const run: ChatRun = {
       appSessionId: input.appSessionId,
       provider: input.provider,
       providerSessionId: input.providerSessionId,
       status: 'running',
-      lastSeq: 0,
+      // Existing viewers can continue using their replay cursor on handoff.
+      lastSeq: previous?.lastSeq ?? 0,
       events: [],
       writer: null as unknown as ChatSessionWriter,
       startedAt: Date.now(),
@@ -264,6 +264,7 @@ export const chatRunRegistry = {
       decorateOutboundEvent: (message) => decorateAndRecordEvent(run, message),
     });
 
+    if (previous) run.writer.inheritOpenConnections(previous.writer);
     runs.set(input.appSessionId, run);
     return run;
   },

@@ -49,6 +49,11 @@ const renderHandlers = () => {
         log.push({ sessionId, idle: true });
       }
     },
+    onSessionProcessing: (sessionId) => {
+      if (sessionId) {
+        activityBySession.set(sessionId, { statusText: null, canInterrupt: true, startedAt: Date.now() });
+      }
+    },
     onSessionBackground: (sessionId, tasks) => {
       if (tasks.length > 0) {
         activityBySession.set(sessionId, { statusText: null, canInterrupt: false, startedAt: tasks[0].startedAt, background: true, tasks });
@@ -61,6 +66,11 @@ const renderHandlers = () => {
     requestLatestMessages: async (sessionId) => { syncs.push(sessionId); },
     sessionStore: {
       appendRealtime: (_sessionId: string, msg: NormalizedMessage) => { stored.push(msg); },
+      removeRealtime: (_sessionId: string, id: string) => {
+        const index = stored.findIndex((message) => message.id === id);
+        if (index < 0) return;
+        stored.splice(index, 1);
+      },
       getMessages: () => stored,
       updateStreaming: () => {},
       finalizeStreaming: () => {},
@@ -68,7 +78,7 @@ const renderHandlers = () => {
   }));
 
   const dispatch = (event: ServerEvent) => listener?.(event);
-  return { dispatch, log, syncs, stored };
+  return { dispatch, log, syncs, stored, activityBySession };
 };
 
 const event = (fields: Record<string, unknown>): ServerEvent => ({
@@ -195,6 +205,21 @@ test('a refused stop request does not idle the session it was sent on', () => {
   // Any other rejection still means the send never became a run.
   dispatch(event({ kind: 'protocol_error', code: 'SESSION_NOT_FOUND', error: 'gone' }));
   assert.deepEqual(log, [{ sessionId: 'viewed-session', idle: true }]);
+});
+
+test('a resend refused during an automatic turn removes only the unsent bubble', () => {
+  const { dispatch, log, stored, activityBySession } = renderHandlers();
+
+  dispatch(event({ kind: 'chat_run_started' }));
+  assert.equal(activityBySession.get('viewed-session')?.canInterrupt, true);
+  dispatch(event({ kind: 'text', role: 'user', id: 'queued-on-server', content: 'follow-up' }));
+  dispatch(event({ kind: 'text', role: 'user', id: 'local_retry', content: 'follow-up' }));
+  dispatch(event({ kind: 'protocol_error', code: 'RUN_IN_PROGRESS', messageId: 'local_retry', error: 'Already running' }));
+
+  assert.deepEqual(stored.filter(({ role }) => role === 'user').map(({ id }) => id), ['queued-on-server']);
+  assert.equal(stored.at(-1)?.kind, 'error');
+  assert.deepEqual(log, []);
+  assert.equal(activityBySession.get('viewed-session')?.canInterrupt, true);
 });
 
 test('a stop refused for a task whose end never arrived settles its chip instead of erroring', () => {

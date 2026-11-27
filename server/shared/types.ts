@@ -216,6 +216,7 @@ export type ProviderSessionModel = {
  * Keep this union in sync with event kinds produced by provider session adapters.
  */
 export type MessageKind =
+  | 'chat_run_started'
   | 'text'
   | 'tool_use'
   | 'tool_result'

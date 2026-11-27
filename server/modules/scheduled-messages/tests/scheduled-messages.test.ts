@@ -391,6 +391,49 @@ test('a draft-text save after the queued message was sent does not send it again
   });
 });
 
+test('a queued turn starts and streams to the browsers that watched the preceding turn', async () => {
+  await withIsolatedDatabase(async (userId) => {
+    const browser = new FakeConnection();
+    const secondTab = new FakeConnection();
+    const otherBrowser = new FakeConnection();
+    connectedClients.add(otherBrowser as never);
+    const prior = chatRunRegistry.startRun({
+      appSessionId: SESSION_ID,
+      provider: 'claude',
+      providerSessionId: null,
+      connection: browser,
+      userId,
+    });
+    assert.ok(prior);
+    chatRunRegistry.attachConnection(SESSION_ID, secondTab);
+    chatRunRegistry.completeRun(SESSION_ID, { exitCode: 0 });
+    sessionDraftsDb.appendQueuedMessage(userId, SESSION_ID, { content: 'queued', attachments: [] });
+
+    const runs: string[] = [];
+    const runtime = {
+      ...(createRuntime([]) as object),
+      run: (
+        _provider: string, command: string, _options: unknown,
+        writer: { send: (message: unknown) => void },
+      ) => {
+        runs.push(command);
+        writer.send({ kind: 'text', role: 'assistant', provider: 'claude', content: 'received' });
+        return Promise.resolve();
+      },
+    } as never;
+
+    await dispatchQueuedMessages(runtime);
+
+    assert.deepEqual(runs, ['queued']);
+    assert.deepEqual(browser.frames.map(({ kind, seq }) => [kind, seq]), [
+      ['complete', 1], ['chat_run_started', 2], ['text', 3], ['complete', 4],
+    ]);
+    assert.deepEqual(secondTab.frames, browser.frames);
+    assert.deepEqual(otherBrowser.frames, []);
+    assert.deepEqual(chatRunRegistry.replayEvents(SESSION_ID, 2).map(({ kind }) => kind), ['text', 'complete']);
+  });
+});
+
 test('a due message interrupts a run in progress instead of failing', async () => {
   await withIsolatedDatabase(async (userId) => {
     scheduledMessagesService.schedule({

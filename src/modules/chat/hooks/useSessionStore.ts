@@ -771,6 +771,14 @@ export function useSessionStore() {
     notify(sessionId);
   }, [getSlot, notify]);
 
+  const removeRealtime = useCallback((sessionId: string, messageId: string) => {
+    const slot = storeRef.current.get(sessionId);
+    if (!slot || !slot.realtimeMessages.some((message) => message.id === messageId)) return;
+    slot.realtimeMessages = slot.realtimeMessages.filter((message) => message.id !== messageId);
+    recomputeMergedIfNeeded(slot);
+    notify(sessionId);
+  }, [notify]);
+
   /**
    * Refreshes only the persisted tail and stitches it onto the contiguous
    * cached suffix. Large turns request a small offset bridge rather than the
@@ -878,6 +886,7 @@ export function useSessionStore() {
     fetchFromServer,
     fetchMore,
     appendRealtime,
+    removeRealtime,
     truncateAt,
     refreshLatestFromServer,
     setActiveSession,
@@ -887,7 +896,7 @@ export function useSessionStore() {
     getMessages,
     getSessionSlot,
   }), [
-    fetchFromServer, fetchMore, appendRealtime, truncateAt, refreshLatestFromServer,
+    fetchFromServer, fetchMore, appendRealtime, removeRealtime, truncateAt, refreshLatestFromServer,
     setActiveSession, isStale, updateStreaming, finalizeStreaming,
     getMessages, getSessionSlot,
   ]);

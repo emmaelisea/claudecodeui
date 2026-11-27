@@ -365,6 +365,8 @@ export type SubagentInfo = {
 /** One rendered entry in a chat transcript — user turn, assistant turn, tool call and result, local command output, or subagent container — and the shape the chat message list and message components consume. */
 export type ChatMessage = {
   type: string;
+  /** The browser's pending row id, echoed back on a refused send. */
+  localMessageId?: string;
   content?: string;
   displayText?: string;
   timestamp: string | number | Date;

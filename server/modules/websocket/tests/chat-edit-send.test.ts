@@ -253,6 +253,7 @@ test('a refused send never rewinds the conversation', async () => {
         type: 'chat.edit-send',
         sessionId: SESSION_ID,
         anchorId: 'turn-b',
+        messageId: 'local_refused_edit',
         content: 'an edit that arrives too late',
       }));
       await settle();
@@ -263,6 +264,7 @@ test('a refused send never rewinds the conversation', async () => {
     assert.equal(rewound, false);
     assert.equal(runs.length, 1);
     assert.equal(socket.frames.at(-1)?.code, 'RUN_IN_PROGRESS');
+    assert.equal(socket.frames.at(-1)?.messageId, 'local_refused_edit');
   }, CODEX_TRANSCRIPT_ROWS);
 });
 

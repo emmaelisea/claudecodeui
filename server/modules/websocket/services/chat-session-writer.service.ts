@@ -140,6 +140,15 @@ export class ChatSessionWriter {
     this.connections.add(newConnection);
   }
 
+  /** Keeps the same audience when the dispatcher starts the next turn. */
+  inheritOpenConnections(previous: ChatSessionWriter): void {
+    for (const connection of previous.connections) {
+      if (connection.readyState === WS_OPEN_STATE) {
+        this.connections.add(connection);
+      }
+    }
+  }
+
   setSessionId(sessionId: string): void {
     this.captureProviderSessionId(sessionId);
   }
