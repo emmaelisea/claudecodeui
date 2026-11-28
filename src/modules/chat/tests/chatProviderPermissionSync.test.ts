@@ -12,8 +12,7 @@ vi.mock('@/shared/api', () => ({ api: {
   providers: {
     models: async () => ({ ok: true, json: async () => ({ success: true, data: null }) }),
     capabilities: async () => ({ ok: true, json: async () => ({ success: true, data: null }) }),
-    sessionActiveModel: async () => ({ ok: true, json: async () => ({ success: true, data: null }) }),
-    claudeSessionPermissionMode: mocks.read,
+    sessionActiveModel: mocks.read,
     setClaudeSessionPermissionMode: mocks.change,
   },
 } }));

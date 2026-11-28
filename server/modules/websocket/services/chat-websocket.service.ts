@@ -276,16 +276,6 @@ async function dispatchRun(
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
-  // Record what this turn runs with so reopening the session later restores the
-  // same model and reasoning effort, and so the resume path has a
-  // session-scoped model answer to use.
-  if (typeof clientOptions.model === 'string' && clientOptions.model.trim()) {
-    providerModelsService.setSessionModel(provider, sessionId, clientOptions.model);
-  }
-  if (typeof clientOptions.effort === 'string' && clientOptions.effort.trim()) {
-    providerModelsService.setSessionEffort(provider, sessionId, clientOptions.effort);
-  }
-
   const uniqueAttachments = readVerifiedAttachments(clientOptions);
 
   // The provider runtimes receive the stable app session id. When their
@@ -311,6 +301,19 @@ async function dispatchRun(
   try {
     if (!ws) {
       run.writer.send(createNormalizedMessage({ kind: 'chat_run_started', provider, sessionId }));
+    }
+    // Record what this turn runs with so reopening the session later restores the
+    // same model, reasoning effort and permission mode, and so the resume path
+    // has a session-scoped model answer to use. A failed write only costs that
+    // restore, so it never fails the turn.
+    try {
+      // Claude saves the mode the SDK actually applied. A queued turn may
+      // still carry the mode it was composed under before the user changed it.
+      providerModelsService.recordSessionSelection(provider, sessionId, provider === 'claude'
+        ? { ...clientOptions, permissionMode: undefined }
+        : clientOptions);
+    } catch (error) {
+      console.error('Failed to record the session selection:', error);
     }
     // Runs only now that the session is reserved, because an edit rewinds the
     // conversation here and a rewind for a run that was never admitted cannot

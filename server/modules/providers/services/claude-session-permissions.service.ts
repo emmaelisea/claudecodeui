@@ -39,6 +39,7 @@ export function createClaudeSessionPermissionsService(overrides: Partial<Depende
 
   return {
     resolveStoredMode,
+    readRuntimeMode: dependencies.readLive,
     recordAppliedMode,
     async read(id: string) {
       requireSession(id);

@@ -745,7 +745,11 @@ router.get(
       sessionId,
       requestedModel,
     });
-    res.json(createApiSuccessResponse(result));
+    res.json(createApiSuccessResponse({
+      ...result,
+      permissionMode: (provider === 'claude' ? claudeSessionPermissionsService.readRuntimeMode(sessionId) : undefined)
+        ?? providerModelsService.readSessionPermissionMode(sessionId),
+    }));
   }),
 );
 
@@ -787,6 +791,57 @@ router.get('/claude/sessions/:sessionId/permission-mode', asyncHandler(async (re
 router.post('/claude/sessions/:sessionId/permission-mode', asyncHandler(async (req: Request, res: Response) => {
   res.json(createApiSuccessResponse(await claudeSessionPermissionsService.change(parseSessionId(req.params.sessionId), req.body?.permissionMode, req.body?.requireRuntime === true)));
 }));
+
+/** Records the permission-mode choice for one app session. */
+router.post(
+  '/:provider/sessions/:sessionId/active-permission-mode',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const permissionMode = readOptionalQueryString((req.body as Record<string, unknown> | undefined)?.permissionMode);
+    if (!permissionMode) {
+      throw new AppError('permissionMode is required.', {
+        code: 'PERMISSION_MODE_REQUIRED',
+        statusCode: 400,
+      });
+    }
+    if (!providerCapabilitiesService.getProviderCapabilities(provider).permissionModes.includes(permissionMode)) {
+      throw new AppError(`${provider} does not support permission mode "${permissionMode}".`, {
+        code: 'INVALID_PERMISSION_MODE',
+        statusCode: 400,
+      });
+    }
+    const stored = providerModelsService.setSessionPermissionMode(provider, sessionId, permissionMode);
+    // A row that refused the mode belongs to a provider without it (the URL can name another one).
+    if (!stored && providerModelsService.hasSession(sessionId)) {
+      throw new AppError(`This session's provider does not support permission mode "${permissionMode}".`, {
+        code: 'INVALID_PERMISSION_MODE',
+        statusCode: 400,
+      });
+    }
+    // Mirror active-model behavior for a composer that picked a mode just
+    // before the session gateway created its row.
+    res.json(createApiSuccessResponse(
+      stored ?? { provider, sessionId, permissionMode, source: 'session' as const },
+    ));
+  }),
+);
+
+/** The model, effort and permission mode a new chat in one project starts with. */
+router.get(
+  '/:provider/project-selection',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const workspacePath = readOptionalQueryString(req.query.workspacePath);
+    if (!workspacePath) {
+      throw new AppError('workspacePath is required.', {
+        code: 'WORKSPACE_PATH_REQUIRED',
+        statusCode: 400,
+      });
+    }
+    res.json(createApiSuccessResponse(providerModelsService.resolveProjectSelection(provider, workspacePath)));
+  }),
+);
 
 // ----------------- Skills routes -----------------
 router.get(
@@ -926,6 +981,9 @@ router.post(
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
     const initialMessage = typeof body.initialMessage === 'string' ? body.initialMessage : '';
     const result = sessionsService.createAppSession(provider, projectPath, initialMessage);
+    // The client switches to the new id before its first send records the
+    // selection, so the row has to answer with it from the start.
+    providerModelsService.recordSessionSelection(provider, result.sessionId, body);
     res.status(201).json(createApiSuccessResponse(result));
   }),
 );

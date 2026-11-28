@@ -382,8 +382,10 @@ export function buildClaudeSdkEnv(hostEnv: NodeJS.ProcessEnv = process.env): Nod
   };
 }
 
-function mapCliOptionsToSDK(options: AnyRecord = {}) {
-  const { providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch } = options;
+export function mapCliOptionsToSDK(options: AnyRecord = {}) {
+  const {
+    providerSessionId, cwd, toolsSettings, permissionMode, effort, resumeAnchorId, resumeFromScratch, enforcePermissionMode,
+  } = options;
 
   const sdkOptions: AnyRecord = {};
 
@@ -402,7 +404,10 @@ function mapCliOptionsToSDK(options: AnyRecord = {}) {
     sdkOptions.cwd = cwd;
   }
 
-  if (permissionMode) {
+  // A chat turn's 'default' means "whatever the user's settings say", so it is left unset and the SDK applies
+  // permissions.defaultMode. A caller that explicitly asked for a mode (the Agent API) gets exactly that mode,
+  // including 'default', so a user-level bypass setting cannot silently skip the approvals it asked for.
+  if (permissionMode && (permissionMode !== 'default' || enforcePermissionMode === true)) {
     sdkOptions.permissionMode = permissionMode;
   }
 
@@ -1334,13 +1339,15 @@ async function queryClaudeSDK(
       console.warn('[Claude SDK] Unable to load provider models for effort validation:', error);
     }
 
-    const resolvedPermissionMode = sessionId && context.resolvePermissionMode
-      ? await context.resolvePermissionMode(sessionId, options.permissionMode)
-      : options.permissionMode;
+    const storedPermissionMode = sessionId && !options.enforcePermissionMode
+      ? await context.resolvePermissionMode?.(sessionId)
+      : undefined;
+    const resolvedPermissionMode = storedPermissionMode ?? options.permissionMode;
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
       providerSessionId,
       permissionMode: resolvedPermissionMode,
+      enforcePermissionMode: options.enforcePermissionMode === true || storedPermissionMode !== undefined,
       model: resolvedModel || options.model,
       effortModels,
     });

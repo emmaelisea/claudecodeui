@@ -356,6 +356,6 @@ test('a live mode change updates both the CLI and the approval callback options,
     assert.deepEqual(script.permissionModes, ['bypassPermissions', 'default']);
     script.emit(init());
     script.emit(result());
-  }, 'default', { toolsSettings: { skipPermissions: true } });
+  }, 'default', { toolsSettings: { skipPermissions: true }, enforcePermissionMode: true });
   assert.equal(await setClaudeSDKPermissionMode(SESSION_ID, 'bypassPermissions'), false);
 });
